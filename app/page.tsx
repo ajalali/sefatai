@@ -181,6 +181,28 @@ export default function Home() {
     await startRecording()
   }
 
+  // ─── Boot screen ──────────────────────────────────────────────
+  if (booting) {
+    return (
+      <main className="relative min-h-screen bg-stone-950 flex flex-col items-center justify-center">
+        <div className="absolute inset-0 bg-gradient-to-b from-stone-950 via-amber-950/20 to-stone-950" />
+        <div className="relative z-10 flex flex-col items-center gap-6">
+          <Image
+            src="/sefatailogo.png"
+            alt="Sefatai"
+            width={200}
+            height={200}
+            className="rounded-full shadow-[0_0_80px_rgba(217,119,6,0.5)]"
+          />
+          <p className="text-amber-400/60 text-xs tracking-widest uppercase animate-pulse">
+            Loading with kavanah...
+          </p>
+        </div>
+      </main>
+    )
+  }
+
+  // ─── Main app ─────────────────────────────────────────────────
   return (
     <main className="relative min-h-screen bg-stone-950 flex flex-col items-center justify-center overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-b from-stone-950 via-amber-950/20 to-stone-950" />
@@ -193,27 +215,21 @@ export default function Home() {
 
         <button
           onClick={handleTap}
-          className={`rounded-full flex items-center justify-center transition-all duration-500 ${
+          className={`w-36 h-36 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
             appState === 'loading'
-              ? 'opacity-60 animate-pulse scale-95'
+              ? 'border-amber-300 bg-amber-900/20 animate-pulse shadow-[0_0_60px_rgba(217,119,6,0.5)]'
               : appState === 'recording'
-              ? 'scale-110 shadow-[0_0_80px_rgba(220,38,38,0.6)]'
+              ? 'border-red-400 bg-red-900/30 shadow-[0_0_60px_rgba(220,38,38,0.5)]'
               : appState === 'playing'
-              ? 'animate-pulse scale-105 shadow-[0_0_80px_rgba(96,165,250,0.4)]'
-              : 'hover:opacity-80 hover:scale-105'
+              ? 'border-blue-400 bg-blue-900/20 shadow-[0_0_60px_rgba(96,165,250,0.4)] animate-pulse'
+              : 'border-amber-400 bg-amber-900/20 shadow-[0_0_40px_rgba(217,119,6,0.3)] hover:bg-amber-800/20'
           }`}
         >
-          <Image
-            src="/sefatailogo.png"
-            alt="Sefatai"
-            width={180}
-            height={180}
-            className="rounded-full shadow-[0_0_60px_rgba(217,119,6,0.4)]"
-          />
+          <span className="text-4xl">🎙️</span>
         </button>
 
         <p className="text-amber-400/60 text-xs tracking-widest uppercase animate-pulse">
-          {booting ? 'Loading with kavanah...' : statusText || 'tap to ask'}
+          {statusText || 'tap to ask'}
         </p>
 
         {transcript && appState !== 'recording' && (
