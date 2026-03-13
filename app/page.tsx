@@ -178,9 +178,9 @@ export default function Home() {
     init()
   }, [])
 
-  const handleTap = async () => {
-    // Always unlock audio on every tap
-    await unlockAudio()
+const handleTap = async () => {
+    // Unlock audio only when idle (first tap before recording)
+    if (appState === 'idle') await unlockAudio()
 
     if (appState === 'loading') return
 
