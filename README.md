@@ -1,2 +1,3 @@
-# mysticguides
-Manifestation voice guides 
+# Sefatai
+
+Voice-first Jewish learning companion.
