@@ -7,7 +7,13 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string | null } {
   const lower = text.toLowerCase()
-  const calendarKeywords = ['parsha', 'parasha', 'shabbat', 'shabbos', 'candle', 'havdalah', 'holiday', 'yom tov', 'rosh chodesh', 'hebrew date', 'jewish calendar', 'this week', 'tonight', 'today']
+  const calendarKeywords = [
+    'parsha', 'parasha', 'shabbat', 'shabbos', 'candle', 'havdalah',
+    'holiday', 'yom tov', 'rosh chodesh', 'hebrew date', 'jewish calendar',
+    'this week', 'tonight', 'today', 'passover', 'pesach', 'sukkot',
+    'rosh hashana', 'yom kippur', 'shavuot', 'purim', 'chanukah', 'hanukkah',
+    'next holiday', 'when is', 'what holiday', 'lag baomer', 'tisha bav'
+  ]
   const needsHebcal = calendarKeywords.some(k => lower.includes(k))
   const refMatch = text.match(/(?:Rashi on |Ramban on |Maimonides on )?(?:Genesis|Exodus|Leviticus|Numbers|Deuteronomy|Bereshit|Shemot|Vayikra|Bamidbar|Devarim|Berakhot|Shabbat|Psalms|Proverbs|Isaiah|Jeremiah)\s+\d+(?::\d+)?/i)
   const detectedRef = refMatch ? refMatch[0].replace(/\s+/g, '.').replace(':', '.') : null
@@ -29,25 +35,52 @@ async function getTextByRef(ref: string): Promise<string> {
   }
 }
 
-async function getCalendarData(): Promise<string> {
+// Current parasha + candle lighting times
+async function getShabbatData(geonameid = '5368361'): Promise<string> {
   try {
-    const res = await fetch('https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=on&mod=on&nx=on&ss=on&mf=on&c=on&geo=none&M=on&s=on')
+    const res = await fetch(`https://www.hebcal.com/shabbat?cfg=json&geonameid=${geonameid}&M=on&leyning=on`)
     if (!res.ok) return ''
     const data = await res.json()
-    const items = data?.items?.slice(0, 8).map((i: any) => `${i.title}${i.date ? ' on ' + i.date : ''}`).join(', ')
+    const items = data?.items?.map((i: any) =>
+      `${i.category}: ${i.title}${i.date ? ' on ' + i.date : ''}`
+    ).join('. ')
     return items || ''
   } catch {
     return ''
   }
 }
 
-async function getShabbatTimes(geonameid = '5368361'): Promise<string> {
+// Upcoming holidays for the next 6 months
+async function getHolidayData(): Promise<string> {
   try {
-    const res = await fetch(`https://www.hebcal.com/shabbat?cfg=json&geonameid=${geonameid}&M=on`)
+    const now = new Date()
+    const year = now.getFullYear()
+    const res = await fetch(
+      `https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=on&mod=on&nx=on&year=${year}&month=x&tz=America/Los_Angeles&locale=en&c=on&geo=geoname&geonameid=5368361`
+    )
     if (!res.ok) return ''
     const data = await res.json()
-    const items = data?.items?.map((i: any) => `${i.title}: ${i.date}`).join(', ')
-    return items || ''
+    // Filter to upcoming events only
+    const upcoming = data?.items?.filter((i: any) => {
+      if (!i.date) return false
+      return new Date(i.date) >= now
+    }).slice(0, 10).map((i: any) => `${i.title} on ${i.date}`).join(', ')
+    return upcoming || ''
+  } catch {
+    return ''
+  }
+}
+
+// Hebrew date for today
+async function getHebrewDate(): Promise<string> {
+  try {
+    const now = new Date()
+    const res = await fetch(
+      `https://www.hebcal.com/converter?cfg=json&gy=${now.getFullYear()}&gm=${now.getMonth() + 1}&gd=${now.getDate()}&g2h=1`
+    )
+    if (!res.ok) return ''
+    const data = await res.json()
+    return data?.hdate || ''
   } catch {
     return ''
   }
@@ -84,10 +117,15 @@ export async function POST(req: Request) {
       }
 
       if (needsHebcal) {
-        const calendar = await getCalendarData()
-        if (calendar) retrievedContext += `\nCurrent Jewish calendar data: ${calendar}`
-        const shabbat = await getShabbatTimes(locationId || '5368361')
-        if (shabbat) retrievedContext += `\nShabbat/candle-lighting times (Los Angeles): ${shabbat}`
+        // Always fetch both shabbat and holidays in parallel
+        const [shabbat, holidays, hebrewDate] = await Promise.all([
+          getShabbatData(locationId || '5368361'),
+          getHolidayData(),
+          getHebrewDate(),
+        ])
+        if (shabbat) retrievedContext += `\nThis week's Shabbat and parasha data: ${shabbat}`
+        if (holidays) retrievedContext += `\nUpcoming Jewish holidays: ${holidays}`
+        if (hebrewDate) retrievedContext += `\nToday's Hebrew date: ${hebrewDate}`
       }
     }
 
