@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import Image from 'next/image'
 
 type AppState = 'idle' | 'loading' | 'recording' | 'playing'
@@ -16,7 +16,7 @@ export default function Home() {
   const [statusText, setStatusText] = useState('')
   const [transcript, setTranscript] = useState('')
   const [answer, setAnswer] = useState('')
-  const [started, setStarted] = useState(false)
+  const [booting, setBooting] = useState(true)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -140,6 +140,14 @@ export default function Home() {
     setStatus('idle', 'tap to ask')
   }, [])
 
+  useEffect(() => {
+    const init = async () => {
+      setBooting(false)
+      await ask('Give me a short welcome and ask what I would like to learn today.')
+    }
+    init()
+  }, [])
+
   const handleTap = async () => {
     if (appState === 'loading') return
 
@@ -173,12 +181,6 @@ export default function Home() {
     await startRecording()
   }
 
-  const handleStart = async () => {
-    setStarted(true)
-    setStatus('idle', 'tap to ask')
-    await ask('Give me a short welcome and ask what I would like to learn today.')
-  }
-
   return (
     <main className="relative min-h-screen bg-stone-950 flex flex-col items-center justify-center overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-b from-stone-950 via-amber-950/20 to-stone-950" />
@@ -186,48 +188,33 @@ export default function Home() {
       <div className="relative z-10 flex flex-col items-center gap-8 px-6 max-w-md w-full">
 
         <div className="text-center">
-          <p className="text-amber-400/50 text-xs tracking-widest uppercase mt-1">Jewish Learning Companion</p>
+          <p className="text-amber-400/50 text-xs tracking-widest uppercase">Jewish Learning Companion</p>
         </div>
 
-        {!started ? (
-          <button
-            onClick={handleStart}
-            className="rounded-full flex items-center justify-center hover:opacity-80 transition-all duration-500 hover:scale-105"
-          >
-            <Image
-              src="/sefatailogo.png"
-              alt="Sefatai"
-              width={180}
-              height={180}
-              className="rounded-full shadow-[0_0_60px_rgba(217,119,6,0.4)]"
-            />
-          </button>
-        ) : (
-          <button
-            onClick={handleTap}
-            className={`rounded-full flex items-center justify-center transition-all duration-500 ${
-              appState === 'loading'
-                ? 'opacity-60 animate-pulse scale-95'
-                : appState === 'recording'
-                ? 'scale-110 shadow-[0_0_80px_rgba(220,38,38,0.6)]'
-                : appState === 'playing'
-                ? 'animate-pulse scale-105 shadow-[0_0_80px_rgba(96,165,250,0.4)]'
-                : 'hover:opacity-80 hover:scale-105'
-            }`}
-          >
-            <Image
-              src="/sefatailogo.png"
-              alt="Sefatai"
-              width={180}
-              height={180}
-              className="rounded-full shadow-[0_0_60px_rgba(217,119,6,0.4)]"
-            />
-          </button>
-        )}
+        <button
+          onClick={handleTap}
+          className={`rounded-full flex items-center justify-center transition-all duration-500 ${
+            appState === 'loading'
+              ? 'opacity-60 animate-pulse scale-95'
+              : appState === 'recording'
+              ? 'scale-110 shadow-[0_0_80px_rgba(220,38,38,0.6)]'
+              : appState === 'playing'
+              ? 'animate-pulse scale-105 shadow-[0_0_80px_rgba(96,165,250,0.4)]'
+              : 'hover:opacity-80 hover:scale-105'
+          }`}
+        >
+          <Image
+            src="/sefatailogo.png"
+            alt="Sefatai"
+            width={180}
+            height={180}
+            className="rounded-full shadow-[0_0_60px_rgba(217,119,6,0.4)]"
+          />
+        </button>
 
-        {statusText && (
-          <p className="text-amber-400/70 text-xs tracking-widest uppercase">{statusText}</p>
-        )}
+        <p className="text-amber-400/60 text-xs tracking-widest uppercase animate-pulse">
+          {booting ? 'Loading with kavanah...' : statusText || 'tap to ask'}
+        </p>
 
         {transcript && appState !== 'recording' && (
           <p className="text-amber-200/40 text-sm text-center italic">"{transcript}"</p>
