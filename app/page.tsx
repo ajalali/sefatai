@@ -213,7 +213,7 @@ export default function Home() {
       <div className="relative z-10 flex flex-col items-center gap-8 px-6 max-w-md w-full">
 
         <div className="text-center">
-          <p className="text-amber-400/50 text-xs tracking-widest uppercase">Jewish Learning Companion</p>
+          <p className="text-amber-400/50 text-xs tracking-widest uppercase">Voice Learning Companion</p>
         </div>
 
         <button
