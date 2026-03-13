@@ -25,6 +25,7 @@ export default function Home() {
   const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const historyRef = useRef<{ role: string; content: string }[]>([])
   const welcomeDoneRef = useRef(false)
+  const audioUnlockedRef = useRef(false)
 
   const setStatus = (state: AppState, text: string) => {
     setAppState(state)
@@ -34,6 +35,22 @@ export default function Home() {
   const stopStream = () => {
     streamRef.current?.getTracks().forEach(t => t.stop())
     streamRef.current = null
+  }
+
+  // Unlock iOS audio on first user tap
+  const unlockAudio = async () => {
+    if (audioUnlockedRef.current) return
+    try {
+      const audio = audioRef.current
+      if (!audio) return
+      audio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
+      await audio.play()
+      audio.pause()
+      audio.src = ''
+      audioUnlockedRef.current = true
+    } catch {
+      // ignore
+    }
   }
 
   const startLoadingMessages = () => {
@@ -76,7 +93,6 @@ export default function Home() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
       audioChunksRef.current = []
-      // Clear previous transcript and answer when starting new question
       setTranscript('')
       setAnswer('')
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
@@ -163,6 +179,9 @@ export default function Home() {
   }, [])
 
   const handleTap = async () => {
+    // Always unlock audio on every tap
+    await unlockAudio()
+
     if (appState === 'loading') return
 
     if (appState === 'playing') {
