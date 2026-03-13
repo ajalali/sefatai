@@ -215,8 +215,7 @@ export default function Home() {
   // ─── Tap handler ──────────────────────────────────────────────
   const handleTap = async () => {
     if (appState === 'idle') await unlockAudio()
-    if (appState === 'loading' || appState === 'transcribing' || appState === 'thinking') return
-
+if (appState === 'transcribing' || appState === 'thinking') return
     if (appState === 'playing') {
       stopAudio()
       return
