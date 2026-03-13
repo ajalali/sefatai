@@ -5,6 +5,15 @@ import { SEFATAI_VOICE_ID, VOICE_SETTINGS, ELEVENLABS_MODEL } from '@/lib/voices
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
+function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string | null } {
+  const lower = text.toLowerCase()
+  const calendarKeywords = ['parsha', 'parasha', 'shabbat', 'shabbos', 'candle', 'havdalah', 'holiday', 'yom tov', 'rosh chodesh', 'hebrew date', 'jewish calendar', 'this week', 'tonight', 'today']
+  const needsHebcal = calendarKeywords.some(k => lower.includes(k))
+  const refMatch = text.match(/(?:Rashi on |Ramban on |Maimonides on )?(?:Genesis|Exodus|Leviticus|Numbers|Deuteronomy|Bereshit|Shemot|Vayikra|Bamidbar|Devarim|Berakhot|Shabbat|Psalms|Proverbs|Isaiah|Jeremiah)\s+\d+(?::\d+)?/i)
+  const detectedRef = refMatch ? refMatch[0].replace(/\s+/g, '.').replace(':', '.') : null
+  return { needsHebcal, detectedRef }
+}
+
 async function getTextByRef(ref: string): Promise<string> {
   try {
     const encoded = encodeURIComponent(ref)
@@ -22,10 +31,10 @@ async function getTextByRef(ref: string): Promise<string> {
 
 async function getCalendarData(): Promise<string> {
   try {
-    const res = await fetch('https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=on&mod=on&nx=on&year=now&c=on')
+    const res = await fetch('https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=on&mod=on&nx=on&ss=on&mf=on&c=on&geo=none&M=on&s=on')
     if (!res.ok) return ''
     const data = await res.json()
-    const items = data?.items?.slice(0, 5).map((i: any) => i.title).join(', ')
+    const items = data?.items?.slice(0, 8).map((i: any) => `${i.title}${i.date ? ' on ' + i.date : ''}`).join(', ')
     return items || ''
   } catch {
     return ''
@@ -34,7 +43,7 @@ async function getCalendarData(): Promise<string> {
 
 async function getShabbatTimes(geonameid = '5368361'): Promise<string> {
   try {
-    const res = await fetch(`https://www.hebcal.com/shabbat?cfg=json&geonameid=${geonameid}`)
+    const res = await fetch(`https://www.hebcal.com/shabbat?cfg=json&geonameid=${geonameid}&M=on`)
     if (!res.ok) return ''
     const data = await res.json()
     const items = data?.items?.map((i: any) => `${i.title}: ${i.date}`).join(', ')
@@ -58,12 +67,15 @@ Rules:
 - Do not use markdown, bullet points, or headers — spoken text only
 - Never present yourself as issuing binding religious authority
 - Cite your source naturally in the answer, e.g. "Rashi on Genesis 1:1 says..."
-- If a source is unavailable, say so honestly`
+- If a source is unavailable, say so honestly
+- When calendar data is provided, use it to answer questions about the current parsha, holidays, and Shabbat times`
 
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { userInput, detectedRef, needsHebcal, locationId, history } = body
+    const { userInput, history, locationId } = body
+
+    const { needsHebcal, detectedRef } = detectIntent(userInput || '')
 
     let retrievedContext = ''
 
@@ -74,11 +86,9 @@ export async function POST(req: Request) {
 
     if (needsHebcal) {
       const calendar = await getCalendarData()
-      if (calendar) retrievedContext += `\nCurrent Jewish calendar events: ${calendar}`
-      if (locationId) {
-        const shabbat = await getShabbatTimes(locationId)
-        if (shabbat) retrievedContext += `\nShabbat/candle-lighting times: ${shabbat}`
-      }
+      if (calendar) retrievedContext += `\nCurrent Jewish calendar data: ${calendar}`
+      const shabbat = await getShabbatTimes(locationId || '5368361')
+      if (shabbat) retrievedContext += `\nShabbat/candle-lighting times (Los Angeles): ${shabbat}`
     }
 
     const historyMessages = (history || []).map((h: any) => ({
@@ -86,7 +96,7 @@ export async function POST(req: Request) {
       content: h.content,
     }))
 
-    const userMessage = `${userInput}${retrievedContext ? `\n\n[Retrieved sources:${retrievedContext}]` : ''}`
+    const userMessage = `${userInput}${retrievedContext ? `\n\n[Retrieved data:${retrievedContext}]` : ''}`
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
