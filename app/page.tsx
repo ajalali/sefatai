@@ -66,8 +66,8 @@ export default function Home() {
       setStatus('playing', 'tap to stop')
       a.src = url
       a.onended = () => { setAppState('idle'); resolve() }
-      a.onerror = () => { setAppState('idle'); resolve() }
-      a.play().catch(() => resolve())
+      a.onerror = (e) => { console.error('audio error', e); setAppState('idle'); resolve() }
+      a.play().catch((e) => { console.error('play error', e); setAppState('idle'); resolve() })
     })
   }
 
@@ -76,6 +76,9 @@ export default function Home() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
       audioChunksRef.current = []
+      // Clear previous transcript and answer when starting new question
+      setTranscript('')
+      setAnswer('')
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
       const recorder = new MediaRecorder(stream, { mimeType })
       mediaRecorderRef.current = recorder
@@ -133,12 +136,14 @@ export default function Home() {
       })
       if (!res.ok) throw new Error('chain failed')
       const spokenText = decodeURIComponent(res.headers.get('X-Spoken-Text') || '')
+      const arrayBuffer = await res.arrayBuffer()
+      const audioBlob = new Blob([arrayBuffer], { type: 'audio/mpeg' })
       if (spokenText) setAnswer(spokenText)
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
+      const url = URL.createObjectURL(audioBlob)
       stopLoadingMessages()
       await playAudio(url)
-    } catch {
+    } catch (e) {
+      console.error('ask error', e)
       stopLoadingMessages()
       setStatus('idle', 'something went wrong')
     }
@@ -214,11 +219,9 @@ export default function Home() {
     <main className="relative min-h-screen bg-stone-950 flex flex-col items-center justify-center overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-b from-stone-950 via-amber-950/20 to-stone-950" />
 
-      <div className="relative z-10 flex flex-col items-center gap-8 px-6 max-w-md w-full">
+      <div className="relative z-10 flex flex-col items-center gap-6 px-6 max-w-md w-full">
 
-        <div className="text-center">
-          <p className="text-amber-400/50 text-xs tracking-widest uppercase">Voice Learning Companion</p>
-        </div>
+        <p className="text-amber-400/50 text-xs tracking-widest uppercase">Voice Learning Companion</p>
 
         <button
           onClick={handleTap}
@@ -239,12 +242,12 @@ export default function Home() {
           {statusText || 'tap to ask'}
         </p>
 
-        {transcript && appState !== 'recording' && (
+        {transcript && (
           <p className="text-amber-200/40 text-sm text-center italic">"{transcript}"</p>
         )}
 
         {answer && (
-          <div className="bg-stone-900/60 border border-amber-900/40 rounded-2xl p-5 text-amber-100/80 text-sm leading-relaxed text-center">
+          <div className="bg-stone-900/60 border border-amber-900/40 rounded-2xl p-5 text-amber-100/80 text-sm leading-relaxed text-center max-h-64 overflow-y-auto">
             {answer}
           </div>
         )}
