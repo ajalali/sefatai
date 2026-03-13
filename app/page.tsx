@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import Image from 'next/image'
 
 type AppState = 'idle' | 'loading' | 'recording' | 'playing'
 
@@ -185,31 +186,42 @@ export default function Home() {
       <div className="relative z-10 flex flex-col items-center gap-8 px-6 max-w-md w-full">
 
         <div className="text-center">
-          <h1 className="text-3xl font-serif text-amber-200 tracking-widest">סֵפָתַי</h1>
-          <p className="text-amber-400/50 text-xs tracking-widest uppercase mt-1">Sefatai</p>
+          <p className="text-amber-400/50 text-xs tracking-widest uppercase mt-1">Jewish Learning Companion</p>
         </div>
 
         {!started ? (
           <button
             onClick={handleStart}
-            className="w-36 h-36 rounded-full border-2 border-amber-400 bg-amber-900/20 flex items-center justify-center hover:bg-amber-800/30 transition-all duration-500 shadow-[0_0_60px_rgba(217,119,6,0.3)]"
+            className="rounded-full flex items-center justify-center hover:opacity-80 transition-all duration-500 hover:scale-105"
           >
-            <span className="text-4xl">✡️</span>
+            <Image
+              src="/sefatailogo.png"
+              alt="Sefatai"
+              width={180}
+              height={180}
+              className="rounded-full shadow-[0_0_60px_rgba(217,119,6,0.4)]"
+            />
           </button>
         ) : (
           <button
             onClick={handleTap}
-            className={`w-36 h-36 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
+            className={`rounded-full flex items-center justify-center transition-all duration-500 ${
               appState === 'loading'
-                ? 'border-amber-300 bg-amber-900/20 animate-pulse shadow-[0_0_60px_rgba(217,119,6,0.5)]'
+                ? 'opacity-60 animate-pulse scale-95'
                 : appState === 'recording'
-                ? 'border-red-400 bg-red-900/30 shadow-[0_0_60px_rgba(220,38,38,0.5)]'
+                ? 'scale-110 shadow-[0_0_80px_rgba(220,38,38,0.6)]'
                 : appState === 'playing'
-                ? 'border-blue-400 bg-blue-900/20 shadow-[0_0_60px_rgba(96,165,250,0.4)] animate-pulse'
-                : 'border-amber-400 bg-amber-900/20 shadow-[0_0_40px_rgba(217,119,6,0.3)] hover:bg-amber-800/20'
+                ? 'animate-pulse scale-105 shadow-[0_0_80px_rgba(96,165,250,0.4)]'
+                : 'hover:opacity-80 hover:scale-105'
             }`}
           >
-            <span className="text-4xl">🎙️</span>
+            <Image
+              src="/sefatailogo.png"
+              alt="Sefatai"
+              width={180}
+              height={180}
+              className="rounded-full shadow-[0_0_60px_rgba(217,119,6,0.4)]"
+            />
           </button>
         )}
 
