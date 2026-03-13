@@ -24,6 +24,7 @@ export default function Home() {
   const streamRef = useRef<MediaStream | null>(null)
   const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const historyRef = useRef<{ role: string; content: string }[]>([])
+  const welcomeDoneRef = useRef(false)
 
   const setStatus = (state: AppState, text: string) => {
     setAppState(state)
@@ -112,9 +113,9 @@ export default function Home() {
     return data.transcript || ''
   }
 
-  const ask = useCallback(async (userInput: string) => {
+  const ask = useCallback(async (userInput: string, isWelcome = false) => {
     startLoadingMessages()
-    if (userInput) {
+    if (userInput && !isWelcome) {
       historyRef.current = [
         ...historyRef.current.slice(-5),
         { role: 'user', content: userInput },
@@ -124,7 +125,11 @@ export default function Home() {
       const res = await fetch('/api/chain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userInput, history: historyRef.current }),
+        body: JSON.stringify({
+          userInput,
+          isWelcome,
+          history: historyRef.current,
+        }),
       })
       if (!res.ok) throw new Error('chain failed')
       const spokenText = decodeURIComponent(res.headers.get('X-Spoken-Text') || '')
@@ -142,11 +147,12 @@ export default function Home() {
 
   useEffect(() => {
     const init = async () => {
-      // Show boot screen for at least 2s — will be replaced with real
-      // library loading once gematria index and RAG are wired up
       await new Promise(r => setTimeout(r, 2000))
       setBooting(false)
-      await ask('Give me a short welcome and ask what I would like to learn today.')
+      if (!welcomeDoneRef.current) {
+        welcomeDoneRef.current = true
+        await ask('', true)
+      }
     }
     init()
   }, [])
@@ -174,7 +180,7 @@ export default function Home() {
           return
         }
         setTranscript(text)
-        await ask(text)
+        await ask(text, false)
       } catch {
         setStatus('idle', 'tap to ask')
       }
@@ -184,7 +190,6 @@ export default function Home() {
     await startRecording()
   }
 
-  // ─── Boot screen ──────────────────────────────────────────────
   if (booting) {
     return (
       <main className="relative min-h-screen bg-stone-950 flex flex-col items-center justify-center">
@@ -205,7 +210,6 @@ export default function Home() {
     )
   }
 
-  // ─── Main app ─────────────────────────────────────────────────
   return (
     <main className="relative min-h-screen bg-stone-950 flex flex-col items-center justify-center overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-b from-stone-950 via-amber-950/20 to-stone-950" />
