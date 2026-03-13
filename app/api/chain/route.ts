@@ -57,38 +57,38 @@ const SYSTEM_PROMPT = `You are Sefatai, a calm and knowledgeable Jewish learning
 
 Your role is to explain Jewish texts, prayers, holidays, and concepts in a clear, respectful, source-grounded way.
 
-You are not a posek and do not issue binding halachic rulings. If the user asks for a practical halachic ruling, explain the relevant concept briefly and say: "For a practical ruling, please consult a qualified rabbi."
+You are not a posek and do not issue binding halachic rulings. If asked for a practical ruling say: "For a practical ruling, please consult a qualified rabbi."
 
 Rules:
-- When sources are provided in context, prioritize them over general knowledge
-- Give a short direct answer first, then a brief explanation
-- Keep spoken answers concise — 1 to 4 sentences max
+- Give a short direct answer — maximum 2 sentences
+- Never give more than 2 sentences under any circumstances
 - When quoting Hebrew, preserve Hebrew script
-- Do not use markdown, bullet points, or headers — spoken text only
-- Never present yourself as issuing binding religious authority
-- Cite your source naturally in the answer, e.g. "Rashi on Genesis 1:1 says..."
-- If a source is unavailable, say so honestly
-- When calendar data is provided, use it to answer questions about the current parsha, holidays, and Shabbat times`
+- No markdown, no bullet points, no headers — spoken text only
+- Cite sources naturally e.g. "Rashi says..."
+- When calendar data is provided, use it directly to answer
+- Never introduce yourself or give a welcome message — just answer the question`
 
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { userInput, history, locationId } = body
-
-    const { needsHebcal, detectedRef } = detectIntent(userInput || '')
+    const { userInput, history, locationId, isWelcome } = body
 
     let retrievedContext = ''
 
-    if (detectedRef) {
-      const text = await getTextByRef(detectedRef)
-      if (text) retrievedContext += `\nSource text for ${detectedRef}:\n${text.slice(0, 1000)}`
-    }
+    if (!isWelcome) {
+      const { needsHebcal, detectedRef } = detectIntent(userInput || '')
 
-    if (needsHebcal) {
-      const calendar = await getCalendarData()
-      if (calendar) retrievedContext += `\nCurrent Jewish calendar data: ${calendar}`
-      const shabbat = await getShabbatTimes(locationId || '5368361')
-      if (shabbat) retrievedContext += `\nShabbat/candle-lighting times (Los Angeles): ${shabbat}`
+      if (detectedRef) {
+        const text = await getTextByRef(detectedRef)
+        if (text) retrievedContext += `\nSource text for ${detectedRef}:\n${text.slice(0, 1000)}`
+      }
+
+      if (needsHebcal) {
+        const calendar = await getCalendarData()
+        if (calendar) retrievedContext += `\nCurrent Jewish calendar data: ${calendar}`
+        const shabbat = await getShabbatTimes(locationId || '5368361')
+        if (shabbat) retrievedContext += `\nShabbat/candle-lighting times (Los Angeles): ${shabbat}`
+      }
     }
 
     const historyMessages = (history || []).map((h: any) => ({
@@ -96,11 +96,13 @@ export async function POST(req: Request) {
       content: h.content,
     }))
 
-    const userMessage = `${userInput}${retrievedContext ? `\n\n[Retrieved data:${retrievedContext}]` : ''}`
+    const userMessage = isWelcome
+      ? 'Give a warm one-sentence welcome in Hebrew and English. Just say shalom and invite them to ask a question. One sentence only.'
+      : `${userInput}${retrievedContext ? `\n\n[Retrieved data:${retrievedContext}]` : ''}`
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 300,
+      max_tokens: 150,
       system: SYSTEM_PROMPT,
       messages: [...historyMessages, { role: 'user', content: userMessage }],
     })
