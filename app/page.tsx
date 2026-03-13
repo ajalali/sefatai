@@ -142,6 +142,9 @@ export default function Home() {
 
   useEffect(() => {
     const init = async () => {
+      // Show boot screen for at least 2s — will be replaced with real
+      // library loading once gematria index and RAG are wired up
+      await new Promise(r => setTimeout(r, 2000))
       setBooting(false)
       await ask('Give me a short welcome and ask what I would like to learn today.')
     }
