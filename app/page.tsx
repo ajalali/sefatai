@@ -21,7 +21,7 @@ const TRANSITIONS: Record<AppState, Partial<Record<Action['type'], AppState>>> =
   recording:    { STOP_RECORDING: 'transcribing', ERROR: 'idle' },
   transcribing: { TRANSCRIBED: 'thinking', ERROR: 'idle' },
   thinking:     { GOT_RESPONSE: 'playing', ERROR: 'idle' },
-  playing:      { AUDIO_ENDED: 'idle', INTERRUPT: 'idle' },
+  playing:      { AUDIO_ENDED: 'idle', INTERRUPT: 'idle', ERROR: 'idle' },
 }
 
 const STATUS_TEXT: Record<AppState, string> = {
@@ -38,8 +38,6 @@ function reducer(state: AppState, action: Action): AppState {
   return next
 }
 
-// ─── Component ────────────────────────────────────────────────
-
 const THINKING_MESSAGES = [
   'searching sources...',
   'consulting texts...',
@@ -51,7 +49,6 @@ export default function Home() {
   const [thinkingText, setThinkingText] = useState(THINKING_MESSAGES[0])
   const [transcript, setTranscript] = useState('')
   const [answer, setAnswer] = useState('')
-  const [booting, setBooting] = useState(true)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -59,10 +56,12 @@ export default function Home() {
   const streamRef = useRef<MediaStream | null>(null)
   const thinkingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const historyRef = useRef<{ role: string; content: string }[]>([])
-  const welcomeDoneRef = useRef(false)
-  const audioUnlockedRef = useRef(false)
+  const appStateRef = useRef<AppState>('idle')
 
-  // Thinking messages cycling
+  useEffect(() => {
+    appStateRef.current = appState
+  }, [appState])
+
   useEffect(() => {
     if (appState === 'thinking') {
       let i = 0
@@ -81,20 +80,6 @@ export default function Home() {
 
   const statusText = appState === 'thinking' ? thinkingText : STATUS_TEXT[appState]
 
-  // ─── Audio unlock (iOS) ───────────────────────────────────────
-  const unlockAudio = async () => {
-    if (audioUnlockedRef.current) return
-    try {
-      const audio = audioRef.current
-      if (!audio) return
-      audio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
-      await audio.play()
-      audio.pause()
-      audio.src = ''
-      audioUnlockedRef.current = true
-    } catch { /* ignore */ }
-  }
-
   // ─── Audio playback ───────────────────────────────────────────
   const stopAudio = () => {
     const a = audioRef.current
@@ -105,12 +90,16 @@ export default function Home() {
   const playAudio = (url: string): Promise<void> => {
     return new Promise((resolve) => {
       const a = audioRef.current
-      if (!a) { resolve(); return }
-      dispatch({ type: 'GOT_RESPONSE' })
+      if (!a) { dispatch({ type: 'ERROR' }); resolve(); return }
       a.src = url
+      dispatch({ type: 'GOT_RESPONSE' })
       a.onended = () => { dispatch({ type: 'AUDIO_ENDED' }); resolve() }
       a.onerror = () => { dispatch({ type: 'ERROR' }); resolve() }
-      a.play().catch(() => { dispatch({ type: 'ERROR' }); resolve() })
+      a.play().catch((e) => {
+        console.error('play error', e)
+        dispatch({ type: 'ERROR' })
+        resolve()
+      })
     })
   }
 
@@ -150,7 +139,6 @@ export default function Home() {
         resolve(blob)
       }
       recorder.stop()
-      dispatch({ type: 'STOP_RECORDING' })
     })
   }
 
@@ -165,18 +153,16 @@ export default function Home() {
   }
 
   // ─── Ask ──────────────────────────────────────────────────────
-  const ask = useCallback(async (userInput: string, isWelcome = false) => {
-    if (userInput && !isWelcome) {
-      historyRef.current = [
-        ...historyRef.current.slice(-5),
-        { role: 'user', content: userInput },
-      ]
-    }
+  const ask = useCallback(async (userInput: string) => {
+    historyRef.current = [
+      ...historyRef.current.slice(-5),
+      { role: 'user', content: userInput },
+    ]
     try {
       const res = await fetch('/api/chain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userInput, isWelcome, history: historyRef.current }),
+        body: JSON.stringify({ userInput, history: historyRef.current }),
       })
       if (!res.ok) throw new Error('chain failed')
       const spokenText = decodeURIComponent(res.headers.get('X-Spoken-Text') || '')
@@ -184,12 +170,10 @@ export default function Home() {
       const audioBlob = new Blob([arrayBuffer], { type: 'audio/mpeg' })
       if (spokenText) {
         setAnswer(spokenText)
-        if (!isWelcome) {
-          historyRef.current = [
-            ...historyRef.current.slice(-5),
-            { role: 'assistant', content: spokenText },
-          ]
-        }
+        historyRef.current = [
+          ...historyRef.current.slice(-5),
+          { role: 'assistant', content: spokenText },
+        ]
       }
       const url = URL.createObjectURL(audioBlob)
       await playAudio(url)
@@ -199,29 +183,18 @@ export default function Home() {
     }
   }, [])
 
-  // ─── Boot ─────────────────────────────────────────────────────
-  useEffect(() => {
-    const init = async () => {
-      await new Promise(r => setTimeout(r, 2000))
-      setBooting(false)
-      if (!welcomeDoneRef.current) {
-        welcomeDoneRef.current = true
-        await ask('', true)
-      }
-    }
-    init()
-  }, [])
-
   // ─── Tap handler ──────────────────────────────────────────────
   const handleTap = async () => {
-    if (appState === 'idle') await unlockAudio()
-if (appState === 'transcribing' || appState === 'thinking') return
-    if (appState === 'playing') {
+    const state = appStateRef.current
+    if (state === 'transcribing' || state === 'thinking') return
+
+    if (state === 'playing') {
       stopAudio()
       return
     }
 
-    if (appState === 'recording') {
+    if (state === 'recording') {
+      dispatch({ type: 'STOP_RECORDING' })
       const blob = await stopRecording()
       if (blob.size < 1000) {
         dispatch({ type: 'ERROR' })
@@ -235,43 +208,31 @@ if (appState === 'transcribing' || appState === 'thinking') return
         }
         setTranscript(text)
         dispatch({ type: 'TRANSCRIBED' })
-        await ask(text, false)
+        await ask(text)
       } catch {
         dispatch({ type: 'ERROR' })
       }
       return
     }
 
+    // idle → start recording
     await startRecording()
   }
 
-  // ─── Boot screen ──────────────────────────────────────────────
-  if (booting) {
-    return (
-      <main className="relative min-h-screen bg-stone-950 flex flex-col items-center justify-center">
-        <div className="absolute inset-0 bg-gradient-to-b from-stone-950 via-amber-950/20 to-stone-950" />
-        <div className="relative z-10 flex flex-col items-center gap-6">
-          <Image
-            src="/sefatailogo.png"
-            alt="Sefatai"
-            width={200}
-            height={200}
-            className="rounded-full shadow-[0_0_80px_rgba(217,119,6,0.5)]"
-          />
-          <p className="text-amber-400/60 text-xs tracking-widest uppercase animate-pulse">
-            Loading with kavanah...
-          </p>
-        </div>
-      </main>
-    )
-  }
-
-  // ─── Main UI ──────────────────────────────────────────────────
+  // ─── UI ───────────────────────────────────────────────────────
   return (
     <main className="relative min-h-screen bg-stone-950 flex flex-col items-center justify-center overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-b from-stone-950 via-amber-950/20 to-stone-950" />
 
       <div className="relative z-10 flex flex-col items-center gap-6 px-6 max-w-md w-full">
+
+        <Image
+          src="/sefatailogo.png"
+          alt="Sefatai"
+          width={120}
+          height={120}
+          className="rounded-full shadow-[0_0_40px_rgba(217,119,6,0.4)] opacity-80"
+        />
 
         <p className="text-amber-400/50 text-xs tracking-widest uppercase">Voice Learning Companion</p>
 
