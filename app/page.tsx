@@ -53,7 +53,6 @@ export default function Home() {
     setStatusText(text)
   }
 
-  // ─── Mic ──────────────────────────────────────────────────────
   const getMicStream = async (): Promise<MediaStream | null> => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -73,21 +72,17 @@ export default function Home() {
     audioContextRef.current = null
   }
 
-  // ─── Recording ───────────────────────────────────────────────
   const startRecording = async (): Promise<boolean> => {
     const stream = await getMicStream()
     if (!stream) return false
-
     audioChunksRef.current = []
     const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
     addDebug(`recording mimeType=${mimeType}`)
     const recorder = new MediaRecorder(stream, { mimeType })
     mediaRecorderRef.current = recorder
-
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) audioChunksRef.current.push(e.data)
     }
-
     recorder.start(100)
     setStatus('recording', 'tap to stop')
     addDebug('recording started')
@@ -109,7 +104,6 @@ export default function Home() {
     })
   }
 
-  // ─── Transcribe ───────────────────────────────────────────────
   const transcribeAudio = async (blob: Blob): Promise<string> => {
     addDebug(`transcribing blob size=${blob.size}`)
     const form = new FormData()
@@ -121,7 +115,6 @@ export default function Home() {
     return data.transcript || ''
   }
 
-  // ─── Audio playback ───────────────────────────────────────────
   const stopAudio = () => {
     const a = audioRef.current
     if (a) { a.pause(); a.src = '' }
@@ -141,7 +134,6 @@ export default function Home() {
     })
   }
 
-  // ─── Loading messages ─────────────────────────────────────────
   const startLoadingMessages = () => {
     stopLoadingMessages()
     let i = 0
@@ -166,11 +158,9 @@ export default function Home() {
     ]
   }
 
-  // ─── Speak ────────────────────────────────────────────────────
   const speak = useCallback(async (userInput: string) => {
     addDebug(`speak "${userInput.slice(0, 30)}"`)
     stopAudio()
-    // NOTE: do NOT clear transcript here — we want it to stay visible
     startLoadingMessages()
     addToHistory('user', userInput)
 
@@ -197,7 +187,6 @@ export default function Home() {
     setStatus('idle', 'tap to ask')
   }, [])
 
-  // ─── Tap handler ──────────────────────────────────────────────
   const handleMicTap = async () => {
     addDebug(`handleMicTap state=${appState}`)
 
@@ -236,38 +225,26 @@ export default function Home() {
       return
     }
 
-    // idle → start recording
-    // clear previous answer and transcript for fresh question
+    // idle → start recording, clear previous
     setTranscript('')
     setAnswer('')
     addDebug('starting recording...')
     await startRecording()
   }
 
-  // ─── Start ────────────────────────────────────────────────────
   const handleStart = () => {
     addDebug('handleStart')
     setStarted(true)
     setStatus('idle', 'tap to ask')
   }
 
-  // ─── UI ───────────────────────────────────────────────────────
   return (
     <main className="relative min-h-screen bg-stone-950 flex flex-col items-center justify-center overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-b from-stone-950 via-amber-950/20 to-stone-950" />
 
       <div className="relative z-10 flex flex-col items-center gap-6 px-6 max-w-md w-full">
 
-     {!started && (
-          <Image
-            src="/sefatailogo.png"
-            alt="Sefatai"
-            width={90}
-            height={90}
-            className="rounded-full shadow-[0_0_40px_rgba(217,119,6,0.4)] opacity-80"
-          />
-        )}
-
+        {/* Hebrew title — always visible */}
         <div className="text-center">
           <h1 className="text-3xl font-serif text-amber-200 tracking-widest">סֵפָתַי</h1>
           <p className="text-amber-400/50 text-xs tracking-widest uppercase mt-1">Voice Learning Companion</p>
@@ -276,15 +253,23 @@ export default function Home() {
         {!started ? (
           <>
             <p className="text-amber-400/60 text-xs tracking-widest uppercase animate-pulse">tap to begin</p>
+            {/* Logo fills the button before tap */}
             <button
               onClick={handleStart}
-              className="w-36 h-36 rounded-full border-2 border-amber-400 bg-amber-900/20 flex items-center justify-center hover:bg-amber-800/30 transition-all duration-500 shadow-[0_0_60px_rgba(217,119,6,0.4)]"
+              className="w-36 h-36 rounded-full border-2 border-amber-400 overflow-hidden hover:opacity-90 transition-all duration-500 shadow-[0_0_60px_rgba(217,119,6,0.4)]"
             >
-              <span className="text-5xl">🎙️</span>
+              <Image
+                src="/sefatailogo.png"
+                alt="Sefatai"
+                width={144}
+                height={144}
+                className="w-full h-full object-cover"
+              />
             </button>
           </>
         ) : (
           <>
+            {/* Plain mic button after tap */}
             <button
               onClick={handleMicTap}
               className={`w-36 h-36 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
