@@ -1,42 +1,9 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect, useReducer } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import Image from 'next/image'
 
-// ─── State machine ────────────────────────────────────────────
-
 type AppState = 'idle' | 'recording' | 'transcribing' | 'thinking' | 'playing'
-
-type Action =
-  | { type: 'START_RECORDING' }
-  | { type: 'STOP_RECORDING' }
-  | { type: 'TRANSCRIBED' }
-  | { type: 'GOT_RESPONSE' }
-  | { type: 'AUDIO_ENDED' }
-  | { type: 'INTERRUPT' }
-  | { type: 'ERROR' }
-
-const TRANSITIONS: Record<AppState, Partial<Record<Action['type'], AppState>>> = {
-  idle:         { START_RECORDING: 'recording' },
-  recording:    { STOP_RECORDING: 'transcribing', ERROR: 'idle' },
-  transcribing: { TRANSCRIBED: 'thinking', ERROR: 'idle' },
-  thinking:     { GOT_RESPONSE: 'playing', ERROR: 'idle' },
-  playing:      { AUDIO_ENDED: 'idle', INTERRUPT: 'idle', ERROR: 'idle' },
-}
-
-const STATUS_TEXT: Record<AppState, string> = {
-  idle:         'tap to ask',
-  recording:    'tap to stop',
-  transcribing: 'transcribing...',
-  thinking:     'searching sources...',
-  playing:      'tap to stop',
-}
-
-function reducer(state: AppState, action: Action): AppState {
-  const next = TRANSITIONS[state]?.[action.type]
-  if (!next) return state
-  return next
-}
 
 const THINKING_MESSAGES = [
   'searching sources...',
@@ -45,8 +12,8 @@ const THINKING_MESSAGES = [
 ]
 
 export default function Home() {
-  const [appState, dispatch] = useReducer(reducer, 'idle')
-  const [thinkingText, setThinkingText] = useState(THINKING_MESSAGES[0])
+  const [appState, setAppState] = useState<AppState>('idle')
+  const [statusText, setStatusText] = useState('tap to ask')
   const [transcript, setTranscript] = useState('')
   const [answer, setAnswer] = useState('')
 
@@ -56,48 +23,51 @@ export default function Home() {
   const streamRef = useRef<MediaStream | null>(null)
   const thinkingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const historyRef = useRef<{ role: string; content: string }[]>([])
-  const appStateRef = useRef<AppState>('idle')
+  // Use a ref for state so callbacks always see the latest value
+  const stateRef = useRef<AppState>('idle')
 
-  useEffect(() => {
-    appStateRef.current = appState
-  }, [appState])
+  const setState = (s: AppState, text: string) => {
+    stateRef.current = s
+    setAppState(s)
+    setStatusText(text)
+  }
 
-  useEffect(() => {
-    if (appState === 'thinking') {
-      let i = 0
-      setThinkingText(THINKING_MESSAGES[0])
-      thinkingIntervalRef.current = setInterval(() => {
-        i = (i + 1) % THINKING_MESSAGES.length
-        setThinkingText(THINKING_MESSAGES[i])
-      }, 2000)
-    } else {
-      if (thinkingIntervalRef.current) {
-        clearInterval(thinkingIntervalRef.current)
-        thinkingIntervalRef.current = null
-      }
+  // ─── Thinking messages ────────────────────────────────────────
+  const startThinking = () => {
+    let i = 0
+    setState('thinking', THINKING_MESSAGES[0])
+    thinkingIntervalRef.current = setInterval(() => {
+      i = (i + 1) % THINKING_MESSAGES.length
+      setStatusText(THINKING_MESSAGES[i])
+    }, 2000)
+  }
+
+  const stopThinking = () => {
+    if (thinkingIntervalRef.current) {
+      clearInterval(thinkingIntervalRef.current)
+      thinkingIntervalRef.current = null
     }
-  }, [appState])
+  }
 
-  const statusText = appState === 'thinking' ? thinkingText : STATUS_TEXT[appState]
-
-  // ─── Audio playback ───────────────────────────────────────────
+  // ─── Audio ────────────────────────────────────────────────────
   const stopAudio = () => {
     const a = audioRef.current
     if (a) { a.pause(); a.src = '' }
-    dispatch({ type: 'INTERRUPT' })
+    setState('idle', 'tap to ask')
   }
 
   const playAudio = (url: string): Promise<void> => {
     return new Promise((resolve) => {
       const a = audioRef.current
-      if (!a) { dispatch({ type: 'ERROR' }); resolve(); return }
+      if (!a) { setState('idle', 'tap to ask'); resolve(); return }
+      stopAudio()
+      setState('playing', 'tap to stop')
       a.src = url
-      dispatch({ type: 'GOT_RESPONSE' })
-      a.onended = () => { dispatch({ type: 'AUDIO_ENDED' }); resolve() }
-      a.onerror = () => { dispatch({ type: 'ERROR' }); resolve() }
+      a.onended = () => { setState('idle', 'tap to ask'); resolve() }
+      a.onerror = () => { setState('idle', 'tap to ask'); resolve() }
       a.play().catch((e) => {
         console.error('play error', e)
-        dispatch({ type: 'ERROR' })
+        setState('idle', 'tap to ask')
         resolve()
       })
     })
@@ -123,9 +93,9 @@ export default function Home() {
         if (e.data.size > 0) audioChunksRef.current.push(e.data)
       }
       recorder.start(100)
-      dispatch({ type: 'START_RECORDING' })
+      setState('recording', 'tap to stop')
     } catch {
-      dispatch({ type: 'ERROR' })
+      setState('idle', 'mic access needed')
     }
   }
 
@@ -154,6 +124,7 @@ export default function Home() {
 
   // ─── Ask ──────────────────────────────────────────────────────
   const ask = useCallback(async (userInput: string) => {
+    startThinking()
     historyRef.current = [
       ...historyRef.current.slice(-5),
       { role: 'user', content: userInput },
@@ -168,6 +139,7 @@ export default function Home() {
       const spokenText = decodeURIComponent(res.headers.get('X-Spoken-Text') || '')
       const arrayBuffer = await res.arrayBuffer()
       const audioBlob = new Blob([arrayBuffer], { type: 'audio/mpeg' })
+      stopThinking()
       if (spokenText) {
         setAnswer(spokenText)
         historyRef.current = [
@@ -179,43 +151,44 @@ export default function Home() {
       await playAudio(url)
     } catch (e) {
       console.error('ask error', e)
-      dispatch({ type: 'ERROR' })
+      stopThinking()
+      setState('idle', 'something went wrong')
     }
   }, [])
 
   // ─── Tap handler ──────────────────────────────────────────────
   const handleTap = async () => {
-    const state = appStateRef.current
-    if (state === 'transcribing' || state === 'thinking') return
+    const s = stateRef.current
 
-    if (state === 'playing') {
+    if (s === 'transcribing' || s === 'thinking') return
+
+    if (s === 'playing') {
       stopAudio()
       return
     }
 
-    if (state === 'recording') {
-      dispatch({ type: 'STOP_RECORDING' })
+    if (s === 'recording') {
+      setState('transcribing', 'transcribing...')
       const blob = await stopRecording()
       if (blob.size < 1000) {
-        dispatch({ type: 'ERROR' })
+        setState('idle', 'tap to ask')
         return
       }
       try {
         const text = await transcribeAudio(blob)
         if (!text.trim()) {
-          dispatch({ type: 'ERROR' })
+          setState('idle', 'tap to ask')
           return
         }
         setTranscript(text)
-        dispatch({ type: 'TRANSCRIBED' })
         await ask(text)
       } catch {
-        dispatch({ type: 'ERROR' })
+        setState('idle', 'tap to ask')
       }
       return
     }
 
-    // idle → start recording
+    // idle → record
     await startRecording()
   }
 
