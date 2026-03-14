@@ -258,13 +258,15 @@ export default function Home() {
 
       <div className="relative z-10 flex flex-col items-center gap-6 px-6 max-w-md w-full">
 
-        <Image
-          src="/sefatailogo.png"
-          alt="Sefatai"
-          width={90}
-          height={90}
-          className="rounded-full shadow-[0_0_40px_rgba(217,119,6,0.4)] opacity-80"
-        />
+     {!started && (
+          <Image
+            src="/sefatailogo.png"
+            alt="Sefatai"
+            width={90}
+            height={90}
+            className="rounded-full shadow-[0_0_40px_rgba(217,119,6,0.4)] opacity-80"
+          />
+        )}
 
         <div className="text-center">
           <h1 className="text-3xl font-serif text-amber-200 tracking-widest">סֵפָתַי</h1>
