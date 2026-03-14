@@ -33,7 +33,6 @@ function DebugLog() {
   )
 }
 
-// ─── Main component ───────────────────────────────────────────
 export default function Home() {
   const [appState, setAppState] = useState<AppState>('idle')
   const [started, setStarted] = useState(false)
@@ -171,9 +170,9 @@ export default function Home() {
   const speak = useCallback(async (userInput: string) => {
     addDebug(`speak "${userInput.slice(0, 30)}"`)
     stopAudio()
-    setTranscript('')
+    // NOTE: do NOT clear transcript here — we want it to stay visible
     startLoadingMessages()
-    if (userInput) addToHistory('user', userInput)
+    addToHistory('user', userInput)
 
     try {
       const res = await fetch('/api/chain', {
@@ -237,6 +236,10 @@ export default function Home() {
       return
     }
 
+    // idle → start recording
+    // clear previous answer and transcript for fresh question
+    setTranscript('')
+    setAnswer('')
     addDebug('starting recording...')
     await startRecording()
   }
@@ -258,12 +261,15 @@ export default function Home() {
         <Image
           src="/sefatailogo.png"
           alt="Sefatai"
-          width={120}
-          height={120}
+          width={90}
+          height={90}
           className="rounded-full shadow-[0_0_40px_rgba(217,119,6,0.4)] opacity-80"
         />
 
-        <p className="text-amber-400/50 text-xs tracking-widest uppercase">Voice Learning Companion</p>
+        <div className="text-center">
+          <h1 className="text-3xl font-serif text-amber-200 tracking-widest">סֵפָתַי</h1>
+          <p className="text-amber-400/50 text-xs tracking-widest uppercase mt-1">Voice Learning Companion</p>
+        </div>
 
         {!started ? (
           <>
