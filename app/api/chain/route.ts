@@ -35,7 +35,6 @@ async function getTextByRef(ref: string): Promise<string> {
   }
 }
 
-// Current parasha + candle lighting times
 async function getShabbatData(geonameid = '5368361'): Promise<string> {
   try {
     const res = await fetch(`https://www.hebcal.com/shabbat?cfg=json&geonameid=${geonameid}&M=on&leyning=on`)
@@ -50,7 +49,6 @@ async function getShabbatData(geonameid = '5368361'): Promise<string> {
   }
 }
 
-// Upcoming holidays for the next 6 months
 async function getHolidayData(): Promise<string> {
   try {
     const now = new Date()
@@ -60,7 +58,6 @@ async function getHolidayData(): Promise<string> {
     )
     if (!res.ok) return ''
     const data = await res.json()
-    // Filter to upcoming events only
     const upcoming = data?.items?.filter((i: any) => {
       if (!i.date) return false
       return new Date(i.date) >= now
@@ -71,7 +68,6 @@ async function getHolidayData(): Promise<string> {
   }
 }
 
-// Hebrew date for today
 async function getHebrewDate(): Promise<string> {
   try {
     const now = new Date()
@@ -104,29 +100,26 @@ Rules:
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { userInput, history, locationId, isWelcome } = body
+    const { userInput, history, locationId } = body
+
+    const { needsHebcal, detectedRef } = detectIntent(userInput || '')
 
     let retrievedContext = ''
 
-    if (!isWelcome) {
-      const { needsHebcal, detectedRef } = detectIntent(userInput || '')
+    if (detectedRef) {
+      const text = await getTextByRef(detectedRef)
+      if (text) retrievedContext += `\nSource text for ${detectedRef}:\n${text.slice(0, 1000)}`
+    }
 
-      if (detectedRef) {
-        const text = await getTextByRef(detectedRef)
-        if (text) retrievedContext += `\nSource text for ${detectedRef}:\n${text.slice(0, 1000)}`
-      }
-
-      if (needsHebcal) {
-        // Always fetch both shabbat and holidays in parallel
-        const [shabbat, holidays, hebrewDate] = await Promise.all([
-          getShabbatData(locationId || '5368361'),
-          getHolidayData(),
-          getHebrewDate(),
-        ])
-        if (shabbat) retrievedContext += `\nThis week's Shabbat and parasha data: ${shabbat}`
-        if (holidays) retrievedContext += `\nUpcoming Jewish holidays: ${holidays}`
-        if (hebrewDate) retrievedContext += `\nToday's Hebrew date: ${hebrewDate}`
-      }
+    if (needsHebcal) {
+      const [shabbat, holidays, hebrewDate] = await Promise.all([
+        getShabbatData(locationId || '5368361'),
+        getHolidayData(),
+        getHebrewDate(),
+      ])
+      if (shabbat) retrievedContext += `\nThis week's Shabbat and parasha data: ${shabbat}`
+      if (holidays) retrievedContext += `\nUpcoming Jewish holidays: ${holidays}`
+      if (hebrewDate) retrievedContext += `\nToday's Hebrew date: ${hebrewDate}`
     }
 
     const historyMessages = (history || []).map((h: any) => ({
@@ -134,9 +127,7 @@ export async function POST(req: Request) {
       content: h.content,
     }))
 
-    const userMessage = isWelcome
-      ? 'Give a warm one-sentence welcome in Hebrew and English. Just say shalom and invite them to ask a question. One sentence only.'
-      : `${userInput}${retrievedContext ? `\n\n[Retrieved data:${retrievedContext}]` : ''}`
+    const userMessage = `${userInput}${retrievedContext ? `\n\n[Retrieved data:${retrievedContext}]` : ''}`
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
