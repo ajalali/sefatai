@@ -39,6 +39,7 @@ export default function Home() {
   const [statusText, setStatusText] = useState('')
   const [transcript, setTranscript] = useState('')
   const [answer, setAnswer] = useState('')
+  const [copied, setCopied] = useState(false)
 
   const historyRef = useRef<{ role: string; content: string }[]>([])
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -59,7 +60,6 @@ export default function Home() {
       streamRef.current = stream
       return stream
     } catch {
-      // addDebug('mic denied')
       setStatus('idle', 'mic access needed')
       return null
     }
@@ -77,7 +77,6 @@ export default function Home() {
     if (!stream) return false
     audioChunksRef.current = []
     const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
-    // addDebug(`recording mimeType=${mimeType}`)
     const recorder = new MediaRecorder(stream, { mimeType })
     mediaRecorderRef.current = recorder
     recorder.ondataavailable = (e) => {
@@ -85,7 +84,6 @@ export default function Home() {
     }
     recorder.start(100)
     setStatus('recording', 'tap to stop')
-    // addDebug('recording started')
     return true
   }
 
@@ -96,7 +94,6 @@ export default function Home() {
       recorder.onstop = () => {
         const mimeType = recorder.mimeType || 'audio/webm'
         const blob = new Blob(audioChunksRef.current, { type: mimeType })
-        // addDebug(`recording stopped, blob size=${blob.size}`)
         stopStream()
         resolve(blob)
       }
@@ -105,13 +102,11 @@ export default function Home() {
   }
 
   const transcribeAudio = async (blob: Blob): Promise<string> => {
-    // addDebug(`transcribing blob size=${blob.size}`)
     const form = new FormData()
     form.append('audio', blob, 'audio.webm')
     const res = await fetch('/api/transcribe', { method: 'POST', body: form })
     if (!res.ok) throw new Error(`transcribe ${res.status}`)
     const data = await res.json()
-    // addDebug(`transcript: "${data.transcript}"`)
     return data.transcript || ''
   }
 
@@ -128,9 +123,9 @@ export default function Home() {
       stopAudio()
       setStatus('playing', 'tap to stop')
       a.src = url
-      a.onended = () => { /*addDebug('audio ended');*/ setAppState('idle'); resolve() }
-      a.onerror = () => { /*addDebug('audio error');*/ setAppState('idle'); resolve() }
-      a.play().catch((e) => { /*addDebug(`play error: ${e}`);*/ console.error('play error', e); resolve() })
+      a.onended = () => { setAppState('idle'); resolve() }
+      a.onerror = () => { setAppState('idle'); resolve() }
+      a.play().catch((e) => { console.error('play error', e); resolve() })
     })
   }
 
@@ -158,8 +153,21 @@ export default function Home() {
     ]
   }
 
+  // ─── Share ────────────────────────────────────────────────────
+  const handleShare = async () => {
+    const text = `${transcript ? `Q: ${transcript}\n\n` : ''}A: ${answer}\n\n— Sefatai (sefatai.vercel.app)`
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Sefatai', text })
+      } catch { /* user cancelled */ }
+    } else {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
   const speak = useCallback(async (userInput: string) => {
-    // addDebug(`speak "${userInput.slice(0, 30)}"`)
     stopAudio()
     startLoadingMessages()
     addToHistory('user', userInput)
@@ -181,7 +189,6 @@ export default function Home() {
       }
       await playAudio(url)
     } catch (e) {
-      // addDebug(`speak error: ${e}`)
       console.error('speak error', e)
       stopLoadingMessages()
     }
@@ -189,8 +196,6 @@ export default function Home() {
   }, [])
 
   const handleMicTap = async () => {
-    // addDebug(`handleMicTap state=${appState}`)
-
     if (appState === 'loading') return
 
     if (appState === 'playing') {
@@ -200,10 +205,8 @@ export default function Home() {
     }
 
     if (appState === 'recording') {
-      // addDebug('stopping recording...')
       const blob = await stopRecording()
       if (blob.size < 1000) {
-        // addDebug('blob too small, ignoring')
         setStatus('idle', 'tap to ask')
         return
       }
@@ -212,13 +215,11 @@ export default function Home() {
       try {
         text = await transcribeAudio(blob)
       } catch (e) {
-        // addDebug(`transcribe error: ${e}`)
         console.error('transcribe error', e)
         setStatus('idle', 'tap to ask')
         return
       }
       if (!text.trim()) {
-        // addDebug('empty transcript')
         setStatus('idle', 'tap to ask')
         return
       }
@@ -227,15 +228,12 @@ export default function Home() {
       return
     }
 
-    // idle → start recording, clear previous
     setTranscript('')
     setAnswer('')
-    // addDebug('starting recording...')
     await startRecording()
   }
 
   const handleStart = () => {
-    // addDebug('handleStart')
     setStarted(true)
     setStatus('idle', 'tap to ask')
   }
@@ -295,9 +293,17 @@ export default function Home() {
             )}
 
             {answer && (
-              <div className="bg-stone-900/60 border border-amber-900/40 rounded-2xl p-5 text-amber-100/80 text-sm leading-relaxed text-center max-h-64 overflow-y-auto">
-                {answer}
-              </div>
+              <>
+                <div className="bg-stone-900/60 border border-amber-900/40 rounded-2xl p-5 text-amber-100/80 text-sm leading-relaxed text-center max-h-64 overflow-y-auto">
+                  {answer}
+                </div>
+                <button
+                  onClick={handleShare}
+                  className="flex items-center gap-2 text-amber-400/60 hover:text-amber-300 text-xs uppercase tracking-widest transition-all"
+                >
+                  <span>{copied ? '✓ copied' : '↑ share'}</span>
+                </button>
+              </>
             )}
           </>
         )}
