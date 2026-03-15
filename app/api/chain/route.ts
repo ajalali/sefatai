@@ -310,7 +310,7 @@ async function searchSefaria(query: string, limit = 3): Promise<{ ref: string; t
         text: (hit._source?.exact || hit._source?.text || '').slice(0, 300),
         url: `https://www.sefaria.org/${toSefariaUrl(ref)}`,
       }
-    }).filter((r: any) => r.ref && r.text)
+    .filter((r: { ref: string; text: string; url: string }) => r.text)
   } catch {
     return []
   }
