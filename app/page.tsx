@@ -160,7 +160,7 @@ export default function Home() {
       if (spokenText) {
         const isRefusal = spokenText.includes('cannot help with that') || spokenText.includes('Please rephrase')
         setAnswer(spokenText)
-        setAnswerKey(k => k + 1) // trigger animation on new answer
+        setAnswerKey(k => k + 1)
         if (isRefusal) {
           setTranscript('')
           historyRef.current = historyRef.current.slice(0, -1)
@@ -223,6 +223,7 @@ export default function Home() {
 
   const handleMore = () => {
     setMorePressed(true)
+    setAnswerKey(k => k + 1)
     speak('say more')
   }
 
@@ -256,9 +257,8 @@ export default function Home() {
         ) : (
           <>
             <div className="relative flex items-center justify-center">
-              {/* Ripple rings — keyed to appState so they restart on each new search */}
               {appState === 'loading' && (
-                <div key={`loading-${answerKey}`} className="absolute inset-0 flex items-center justify-center">
+                <div key={`ripple-${answerKey}`} className="absolute inset-0 flex items-center justify-center">
                   <div className="absolute rounded-full border border-amber-400/50 animate-ping"
                     style={{ width: '160px', height: '160px', animationDuration: '1s' }} />
                   <div className="absolute rounded-full border border-amber-300/30 animate-ping"
@@ -298,9 +298,7 @@ export default function Home() {
               <div
                 key={answerKey}
                 className="bg-stone-900/60 border border-amber-900/40 rounded-2xl p-5 text-amber-100/80 text-sm leading-relaxed text-center max-h-64 overflow-y-auto whitespace-pre-line"
-                style={{
-                  animation: 'answerReveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-                }}
+                style={{ animation: 'answerReveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}
               >
                 {answer}
               </div>
@@ -310,13 +308,13 @@ export default function Home() {
               <button
                 onClick={handleMore}
                 disabled={morePressed}
-                className={`text-xs uppercase tracking-widest transition-all duration-300 border rounded-full px-4 py-1 ${
+                className={`text-xs uppercase tracking-widest transition-all duration-300 border rounded-full px-5 py-2 min-w-[90px] ${
                   morePressed
-                    ? 'border-amber-400/60 text-amber-300 bg-amber-900/30 scale-95 opacity-70'
+                    ? 'border-amber-400/30 text-amber-400/30 bg-transparent cursor-not-allowed'
                     : 'border-amber-900/40 text-amber-400/50 hover:text-amber-300 hover:border-amber-400/40'
                 }`}
               >
-                {morePressed ? '...' : '+ more'}
+                {morePressed ? '· · ·' : '+ more'}
               </button>
             )}
 
