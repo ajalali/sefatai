@@ -5,6 +5,8 @@ import { SEFATAI_VOICE_ID, VOICE_SETTINGS, ELEVENLABS_MODEL } from '@/lib/voices
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
+// ─── Intent detection ─────────────────────────────────────────
+
 function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string | null } {
   const lower = text.toLowerCase()
   const calendarKeywords = [
@@ -20,6 +22,8 @@ function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string
   return { needsHebcal, detectedRef }
 }
 
+// ─── Sefaria ──────────────────────────────────────────────────
+
 async function getTextByRef(ref: string): Promise<string> {
   try {
     const encoded = encodeURIComponent(ref)
@@ -34,6 +38,8 @@ async function getTextByRef(ref: string): Promise<string> {
     return ''
   }
 }
+
+// ─── Hebcal ───────────────────────────────────────────────────
 
 async function getShabbatData(geonameid = '5368361'): Promise<string> {
   try {
@@ -82,6 +88,74 @@ async function getHebrewDate(): Promise<string> {
   }
 }
 
+// ─── Text chunking ────────────────────────────────────────────
+
+type Chunk = { text: string; lang: 'he' | 'en' }
+
+function chunkByLanguage(text: string): Chunk[] {
+  const parts = text.split(/(\s*[\u0590-\u05FF\uFB1D-\uFB4F][\u0590-\u05FF\uFB1D-\uFB4F\s]*\s*)/)
+  const chunks: Chunk[] = []
+
+  for (const part of parts) {
+    if (!part.trim()) continue
+    const isHebrew = /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(part)
+    const lang = isHebrew ? 'he' : 'en'
+    if (chunks.length > 0 && chunks[chunks.length - 1].lang === lang) {
+      chunks[chunks.length - 1].text += part
+    } else {
+      chunks.push({ text: part, lang })
+    }
+  }
+
+  return chunks.filter(c => c.text.trim().length > 0)
+}
+
+// ─── ElevenLabs TTS per chunk ─────────────────────────────────
+
+async function ttsChunk(text: string, lang: 'he' | 'en'): Promise<ArrayBuffer> {
+  const body: any = {
+    text,
+    model_id: ELEVENLABS_MODEL,
+    voice_settings: VOICE_SETTINGS,
+  }
+  if (lang === 'he') body.language_code = 'he'
+
+  const res = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${SEFATAI_VOICE_ID}`,
+    {
+      method: 'POST',
+      headers: {
+        'xi-api-key': process.env.ELEVENLABS_API_KEY!,
+        'Content-Type': 'application/json',
+        'Accept': 'audio/mpeg',
+      },
+      body: JSON.stringify(body),
+    }
+  )
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`ElevenLabs error: ${res.status} - ${err}`)
+  }
+
+  return res.arrayBuffer()
+}
+
+// ─── Stitch audio buffers ─────────────────────────────────────
+
+function stitchAudio(buffers: ArrayBuffer[]): Buffer {
+  const total = buffers.reduce((sum, b) => sum + b.byteLength, 0)
+  const result = Buffer.allocUnsafe(total)
+  let offset = 0
+  for (const buf of buffers) {
+    Buffer.from(buf).copy(result, offset)
+    offset += buf.byteLength
+  }
+  return result
+}
+
+// ─── System prompt ────────────────────────────────────────────
+
 const SYSTEM_PROMPT = `You are Sefatai, a calm, warm, and deeply knowledgeable Jewish learning companion with expertise across Torah, Talmud, halacha, Jewish philosophy, and the full range of Jewish tradition — Ashkenazi, Sephardi, and Mizrahi.
 
 Your role is to teach, explain, and illuminate Jewish texts, laws, concepts, prayers, and traditions with clarity and depth.
@@ -89,7 +163,7 @@ Your role is to teach, explain, and illuminate Jewish texts, laws, concepts, pra
 How you answer:
 - Lead with the Torah or Talmudic source when relevant
 - Cite commentators naturally: Rashi, Rambam, Shulchan Aruch, Mishnah Berurah, Ben Ish Chai, Kaf HaChaim, etc.
-- When quoting Hebrew or Aramaic, preserve the original script
+- When quoting Hebrew or Aramaic, ALWAYS include full nikud (vowel marks) so text-to-speech pronounces correctly — e.g. צַלְמָוֶת not צלמות, שְׁמַע not שמע
 - Speak like a knowledgeable chavruta partner — direct, warm, intellectually alive
 - Keep answers concise — maximum 3 sentences for spoken audio
 - No markdown, no bullet points, no headers — spoken text only
@@ -104,6 +178,8 @@ On calendar questions:
 - Use the retrieved calendar data to give precise current answers
 
 Never introduce yourself. Never give a welcome message. Just answer.`
+
+// ─── Main handler ─────────────────────────────────────────────
 
 export async function POST(req: Request) {
   try {
@@ -147,6 +223,7 @@ export async function POST(req: Request) {
 
     const userMessage = `${userInput}${retrievedContext ? `\n\n[Retrieved data:${retrievedContext}]` : ''}`
 
+    // ─── Claude ───────────────────────────────────────────────
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 200,
@@ -162,28 +239,39 @@ export async function POST(req: Request) {
 
     sources.push({ label: 'Claude (Anthropic)' })
 
-    const elevenRes = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${SEFATAI_VOICE_ID}/stream`,
-      {
-        method: 'POST',
-        headers: {
-          'xi-api-key': process.env.ELEVENLABS_API_KEY!,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: spokenText,
-          model_id: ELEVENLABS_MODEL,
-          voice_settings: VOICE_SETTINGS,
-        }),
-      }
-    )
+    // ─── Chunk + parallel TTS ─────────────────────────────────
+    const chunks = chunkByLanguage(spokenText)
 
-    if (!elevenRes.ok) {
-      const errText = await elevenRes.text()
-      throw new Error(`ElevenLabs error: ${elevenRes.status} - ${errText}`)
+    // Skip chunking if no Hebrew present — single call is faster
+    let stitched: Buffer
+    if (chunks.length === 1 && chunks[0].lang === 'en') {
+      const res = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${SEFATAI_VOICE_ID}`,
+        {
+          method: 'POST',
+          headers: {
+            'xi-api-key': process.env.ELEVENLABS_API_KEY!,
+            'Content-Type': 'application/json',
+            'Accept': 'audio/mpeg',
+          },
+          body: JSON.stringify({
+            text: spokenText,
+            model_id: ELEVENLABS_MODEL,
+            voice_settings: VOICE_SETTINGS,
+          }),
+        }
+      )
+      if (!res.ok) throw new Error(`ElevenLabs error: ${res.status}`)
+      stitched = Buffer.from(await res.arrayBuffer())
+    } else {
+      // Fire all chunks in parallel, stitch in order
+      const audioBuffers = await Promise.all(
+        chunks.map(chunk => ttsChunk(chunk.text, chunk.lang))
+      )
+      stitched = stitchAudio(audioBuffers)
     }
 
-    return new Response(elevenRes.body, {
+    return new Response(stitched, {
       headers: {
         'Content-Type': 'audio/mpeg',
         'X-Spoken-Text': encodeURIComponent(spokenText),
