@@ -387,10 +387,51 @@ async function getHebrewDate(): Promise<string> {
 // ─── Speech sanitization ──────────────────────────────────────
 
 function sanitizeForSpeech(text: string): string {
-  return text
+  // Divine name — possessive first, then bare
+  let out = text
+    .replace(/יהוה\s*'s/g, "Hashem's")
+    .replace(/ה׳\s*'s/g, "Hashem's")
+    .replace(/ד׳\s*'s/g, "Hashem's")
     .replace(/יהוה/g, 'Hashem')
     .replace(/ה׳/g, 'Hashem')
     .replace(/ד׳/g, 'Hashem')
+
+  // Hebrew letter names — so TTS says "Alef" not "ah"
+  const letterNames: [RegExp, string][] = [
+    [/\bא\b/g, 'Alef'],
+    [/\bב\b/g, 'Bet'],
+    [/\bג\b/g, 'Gimel'],
+    [/\bד\b/g, 'Dalet'],
+    [/\bה\b/g, 'Hey'],
+    [/\bו\b/g, 'Vav'],
+    [/\bז\b/g, 'Zayin'],
+    [/\bח\b/g, 'Chet'],
+    [/\bט\b/g, 'Tet'],
+    [/\bי\b/g, 'Yod'],
+    [/\bכ\b/g, 'Kaf'],
+    [/\bך\b/g, 'Kaf Sofit'],
+    [/\bל\b/g, 'Lamed'],
+    [/\bמ\b/g, 'Mem'],
+    [/\bם\b/g, 'Mem Sofit'],
+    [/\bנ\b/g, 'Nun'],
+    [/\bן\b/g, 'Nun Sofit'],
+    [/\bס\b/g, 'Samech'],
+    [/\bע\b/g, 'Ayin'],
+    [/\bפ\b/g, 'Peh'],
+    [/\bף\b/g, 'Peh Sofit'],
+    [/\bצ\b/g, 'Tzadi'],
+    [/\bץ\b/g, 'Tzadi Sofit'],
+    [/\bק\b/g, 'Kuf'],
+    [/\bר\b/g, 'Resh'],
+    [/\bש\b/g, 'Shin'],
+    [/\bת\b/g, 'Tav'],
+  ]
+
+  for (const [pattern, name] of letterNames) {
+    out = out.replace(pattern, name)
+  }
+
+  return out
 }
 
 // ─── ElevenLabs TTS ───────────────────────────────────────────
@@ -582,7 +623,7 @@ export async function POST(req: Request) {
     }))
 
     const userMessage = `${userInput}${retrievedContext ? `\n\n[Retrieved data:${retrievedContext}]` : ''}`
-    const maxTokens = isRecitation ? 1500 : isGematria ? 400 : 200
+    const maxTokens = isRecitation ? 4000 : isGematria ? 600 : 500
 
     const spokenText = await generateAnswer(historyMessages, userMessage, maxTokens)
 
@@ -595,6 +636,7 @@ export async function POST(req: Request) {
       }
     }
 
+    // spokenText → card (shows יהוה), sanitized → TTS (says Hashem)
     const audio = await textToSpeech(sanitizeForSpeech(spokenText))
 
     return new Response(audio, {
