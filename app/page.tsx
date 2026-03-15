@@ -14,26 +14,6 @@ const LOADING_MESSAGES = [
 type AppState = 'idle' | 'loading' | 'playing' | 'recording'
 type Source = { label: string; url?: string }
 
-// ─── Debug (commented out — uncomment to re-enable) ───────────
-// const debugLines: string[] = []
-// function addDebug(msg: string) {
-//   const t = new Date().toLocaleTimeString()
-//   debugLines.unshift(`${t} ${msg}`)
-//   if (debugLines.length > 30) debugLines.pop()
-// }
-// function DebugLog() {
-//   const [lines, setLines] = useState<string[]>([])
-//   useEffect(() => {
-//     const interval = setInterval(() => setLines([...debugLines]), 300)
-//     return () => clearInterval(interval)
-//   }, [])
-//   return (
-//     <div className="fixed bottom-0 left-0 right-0 z-50 bg-black/95 text-green-400 text-xs font-mono p-2 max-h-40 overflow-y-auto border-t border-green-900">
-//       {lines.map((l, i) => <div key={i}>{l}</div>)}
-//     </div>
-//   )
-// }
-
 export default function Home() {
   const [appState, setAppState] = useState<AppState>('idle')
   const [started, setStarted] = useState(false)
@@ -49,6 +29,7 @@ export default function Home() {
   const audioChunksRef = useRef<Blob[]>([])
   const streamRef = useRef<MediaStream | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
+  const lastAnswerRef = useRef<string>('')
 
   const setStatus = (s: AppState, text: string) => {
     setAppState(s)
@@ -176,6 +157,7 @@ export default function Home() {
       stopLoadingMessages()
       if (spokenText) {
         setAnswer(spokenText)
+        lastAnswerRef.current = spokenText
         addToHistory('assistant', spokenText)
       }
       await playAudio(url)
@@ -231,7 +213,13 @@ export default function Home() {
   }
 
   const handleMore = () => {
-    speak('Give me more — either recite more of the same text, or go deeper on the same concept.')
+    const last = lastAnswerRef.current
+    if (!last) return
+    const wasRecitation = /[\u0590-\u05FF]/.test(last) && last.length > 200
+    const morePrompt = wasRecitation
+      ? 'Give one brief commentary insight on the text just recited — one sentence from Rashi, Radak, or another commentator. Maximum 2 sentences.'
+      : 'Add one more insight on what you just said — one related source or application. Maximum 2 sentences.'
+    speak(morePrompt)
   }
 
   return (
@@ -294,7 +282,7 @@ export default function Home() {
               </div>
             )}
 
-            {answer && appState === 'idle' && (
+            {answer && appState === 'idle' && lastAnswerRef.current && (
               <button
                 onClick={handleMore}
                 className="text-amber-400/50 hover:text-amber-300 text-xs uppercase tracking-widest transition-colors border border-amber-900/40 rounded-full px-4 py-1"
