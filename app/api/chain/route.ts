@@ -1,3 +1,8 @@
+👉 **https://github.com/ajalali/sefatai/edit/main/app/api/chain/route.ts**
+
+Select all and replace with:
+
+```ts
 export const runtime = 'nodejs'
 
 import Anthropic from '@anthropic-ai/sdk'
@@ -22,7 +27,14 @@ async function validateSefariaRef(ref: string, fallbackSlug: string): Promise<st
 
 // ─── Intent detection ─────────────────────────────────────────
 
-function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string | null; isRecitation: boolean; isMore: boolean } {
+function detectIntent(text: string): {
+  needsHebcal: boolean
+  detectedRef: string | null
+  isRecitation: boolean
+  isMore: boolean
+  isGematria: boolean
+  gematriaQuery: string | null
+} {
   const lower = text.toLowerCase()
 
   const calendarKeywords = [
@@ -35,6 +47,15 @@ function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string
   const needsHebcal = calendarKeywords.some(k => lower.includes(k))
   const isRecitation = /(recite|read out|read me|say|give me the verse|give me the text|give me the pasuk|full|whole|entire|complete|all of|psalm|tehillim|perek|chapter|parasha|portion|pasuk|possuk|verse|text of|words of)/i.test(lower)
   const isMore = lower.trim() === 'say more'
+
+  const gematriaKeywords = [
+    'gematria', 'gematria of', 'numerical value', 'equals in gematria',
+    'what is the value', 'gematria equal', 'shares gematria', 'same gematria',
+    'atbash', 'albam', 'mispar', 'notarikon', 'temurah',
+    'what words equal', 'what torah words', 'what equals', 'numerically equal',
+  ]
+  const isGematria = gematriaKeywords.some(k => lower.includes(k))
+  const gematriaQuery = isGematria ? text : null
 
   const tanakh = [
     'Genesis','Bereshit','Bereishit','Exodus','Shemot','Leviticus','Vayikra',
@@ -79,11 +100,7 @@ function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string
     'Likutei Torah','Torah Or',
     'Pardes Rimonim','Pri Etz Chaim','Mevo Shearim',
   ]
-  const gematria = [
-    'Gematria','Mispar Gadol','Mispar Katan',
-    'Mispar Siduri','Atbash','Albam',
-    'Sefer Gematriot','Notarikon','Temurah',
-  ]
+  const gematriaBooks = ['Sefer Gematriot','Notarikon']
   const mussar = [
     'Chovot HaLevavot','Duties of the Heart',
     'Mesillat Yesharim','Path of the Just',
@@ -105,7 +122,7 @@ function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string
   const allSources = [
     ...tanakh, ...talmud, ...mishnah, ...rambam,
     ...shulchanAruch, ...commentators, ...kabbalah,
-    ...gematria, ...mussar, ...midrash,
+    ...gematriaBooks, ...mussar, ...midrash,
   ]
 
   const sourcePattern = allSources
@@ -124,7 +141,64 @@ function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string
   let detectedRef: string | null = null
   if (refMatch) detectedRef = refMatch[0].trim()
 
-  return { needsHebcal, detectedRef, isRecitation, isMore }
+  return { needsHebcal, detectedRef, isRecitation, isMore, isGematria, gematriaQuery }
+}
+
+// ─── TorahCalc Gematria ───────────────────────────────────────
+
+type GematriaResult = {
+  calculation: any
+  matches: any
+}
+
+async function getGematria(text: string): Promise<GematriaResult> {
+  try {
+    const [calcRes, searchRes] = await Promise.all([
+      fetch(`https://www.torahcalc.com/api/gematria?text=${encodeURIComponent(text)}`),
+      fetch(`https://www.torahcalc.com/api/gematriasearch?text=${encodeURIComponent(text)}`),
+    ])
+    const calculation = calcRes.ok ? await calcRes.json() : null
+    const matches = searchRes.ok ? await searchRes.json() : null
+    return { calculation, matches }
+  } catch {
+    return { calculation: null, matches: null }
+  }
+}
+
+function formatGematriaContext(result: GematriaResult): string {
+  if (!result.calculation && !result.matches) return ''
+  let context = ''
+
+  if (result.calculation?.result) {
+    const methods = result.calculation.result
+    const keyMethods = [
+      'Mispar Hechrachi', 'Mispar Gadol', 'Mispar Siduri',
+      'Mispar Katan', 'Atbash', 'Mispar Kolel'
+    ]
+    context += '\nGematria values:\n'
+    for (const method of keyMethods) {
+      const entry = methods[method]
+      if (entry) context += `${method}: ${entry.value}\n`
+    }
+  }
+
+  if (result.matches?.result) {
+    const r = result.matches.result
+    context += '\nTorah words with same gematria:\n'
+    if (r.wordsInTorah?.length) {
+      context += r.wordsInTorah.slice(0, 8).map((w: any) =>
+        `${w.word} (${w.ref || ''})`
+      ).join(', ') + '\n'
+    }
+    if (r.versesInTorah?.length) {
+      context += '\nTorah verses with same gematria:\n'
+      context += r.versesInTorah.slice(0, 3).map((v: any) =>
+        `${v.ref}: ${v.text?.slice(0, 80) || ''}`
+      ).join('\n') + '\n'
+    }
+  }
+
+  return context
 }
 
 // ─── Source detection from answer text ───────────────────────
@@ -170,27 +244,24 @@ const KNOWN_SOURCES: { pattern: RegExp; label: string; sefariaSlug: string }[] =
   { pattern: /\bShem MiShmuel\b/i, label: 'Shem MiShmuel', sefariaSlug: 'Shem_MiShmuel' },
 ]
 
-// Extract specific refs from answer text e.g. "Rashi on Genesis 1:1"
 const SPECIFIC_REF_PATTERN = /(?:Rashi|Ramban|Ibn Ezra|Sforno|Radak|Nachmanides|Ohr HaChaim|Alshich|Rambam|Ben Ish Chai|Ben Ish Hai|Tanya|Zohar|Mishnah Berurah|Shulchan Aruch)\s+(?:on\s+)?(?:Genesis|Exodus|Leviticus|Numbers|Deuteronomy|Psalms|Proverbs|Isaiah|Berakhot|Shabbat|Chapter|Bereshit|Shemot)\s*[\d:ab.]+/gi
 
 async function extractSourcesFromText(text: string): Promise<{ label: string; url: string }[]> {
   const found: { label: string; url: string }[] = []
   const seen = new Set<string>()
 
-  // First try to extract specific refs like "Rashi on Genesis 1:1"
   const specificRefs = text.match(SPECIFIC_REF_PATTERN) || []
   for (const ref of specificRefs) {
     if (seen.has(ref)) continue
     seen.add(ref)
-    // Find the fallback slug from KNOWN_SOURCES
     const source = KNOWN_SOURCES.find(s => s.pattern.test(ref.split(/\s+/)[0]))
     const fallback = source?.sefariaSlug || 'texts'
     const url = await validateSefariaRef(ref, fallback)
     found.push({ label: ref, url })
   }
 
-  // Then add general source mentions not already covered
   for (const source of KNOWN_SOURCES) {
+    if (!source.sefariaSlug) continue
     if (source.pattern.test(text) && !seen.has(source.label)) {
       seen.add(source.label)
       found.push({ label: source.label, url: `https://www.sefaria.org/${source.sefariaSlug}` })
@@ -234,12 +305,7 @@ async function getTextByRef(ref: string): Promise<string> {
 async function searchSefaria(query: string, limit = 3): Promise<{ ref: string; text: string; url: string }[]> {
   try {
     const body = {
-      query: {
-        query_string: {
-          query: query,
-          fields: ['exact', 'naive_lemmatizer']
-        }
-      },
+      query: { query_string: { query, fields: ['exact', 'naive_lemmatizer'] } },
       size: limit,
       _source: ['ref', 'heRef', 'text', 'exact']
     }
@@ -250,8 +316,7 @@ async function searchSefaria(query: string, limit = 3): Promise<{ ref: string; t
     })
     if (!res.ok) return []
     const data = await res.json()
-    const hits = data?.hits?.hits || []
-    return hits.map((hit: any) => {
+    return (data?.hits?.hits || []).map((hit: any) => {
       const ref = hit._source?.ref || ''
       return {
         ref,
@@ -272,21 +337,17 @@ async function getRelatedTexts(ref: string, limit = 3): Promise<{ ref: string; t
     const res = await fetch(`https://www.sefaria.org/api/related/${encoded}`)
     if (!res.ok) return []
     const data = await res.json()
-    const links = (data?.links || [])
-      .filter((l: any) => l.category !== 'Commentary')
-      .slice(0, limit)
+    const links = (data?.links || []).filter((l: any) => l.category !== 'Commentary').slice(0, limit)
     const results: { ref: string; text: string; url: string }[] = []
     for (const link of links) {
       const linkRef = link.ref || link.anchorRef
       if (!linkRef) continue
       const text = await getTextByRef(linkRef)
-      if (text) {
-        results.push({
-          ref: linkRef,
-          text: text.slice(0, 300),
-          url: `https://www.sefaria.org/${toSefariaUrl(linkRef)}`,
-        })
-      }
+      if (text) results.push({
+        ref: linkRef,
+        text: text.slice(0, 300),
+        url: `https://www.sefaria.org/${toSefariaUrl(linkRef)}`
+      })
     }
     return results
   } catch {
@@ -308,9 +369,7 @@ async function getShabbatData(geonameid = '5368361'): Promise<string> {
 async function getHolidayData(): Promise<string> {
   try {
     const now = new Date()
-    const res = await fetch(
-      `https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=on&mod=on&nx=on&year=${now.getFullYear()}&month=x&tz=America/Los_Angeles&locale=en&c=on&geo=geoname&geonameid=5368361`
-    )
+    const res = await fetch(`https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=on&mod=on&nx=on&year=${now.getFullYear()}&month=x&tz=America/Los_Angeles&locale=en&c=on&geo=geoname&geonameid=5368361`)
     if (!res.ok) return ''
     const data = await res.json()
     return data?.items?.filter((i: any) => i.date && new Date(i.date) >= now)
@@ -321,13 +380,21 @@ async function getHolidayData(): Promise<string> {
 async function getHebrewDate(): Promise<string> {
   try {
     const now = new Date()
-    const res = await fetch(
-      `https://www.hebcal.com/converter?cfg=json&gy=${now.getFullYear()}&gm=${now.getMonth() + 1}&gd=${now.getDate()}&g2h=1`
-    )
+    const res = await fetch(`https://www.hebcal.com/converter?cfg=json&gy=${now.getFullYear()}&gm=${now.getMonth() + 1}&gd=${now.getDate()}&g2h=1`)
     if (!res.ok) return ''
     const data = await res.json()
     return data?.hdate || ''
   } catch { return '' }
+}
+
+// ─── Speech sanitization ──────────────────────────────────────
+
+function sanitizeForSpeech(text: string): string {
+  // Divine name must never be pronounced — say Hashem instead
+  return text
+    .replace(/יהוה/g, 'Hashem')
+    .replace(/ה׳/g, 'Hashem')
+    .replace(/ד׳/g, 'Hashem')
 }
 
 // ─── ElevenLabs TTS ───────────────────────────────────────────
@@ -340,11 +407,7 @@ async function textToSpeech(text: string): Promise<ArrayBuffer> {
       'Content-Type': 'application/json',
       'Accept': 'audio/mpeg',
     },
-    body: JSON.stringify({
-      text,
-      model_id: ELEVENLABS_MODEL,
-      voice_settings: VOICE_SETTINGS,
-    }),
+    body: JSON.stringify({ text, model_id: ELEVENLABS_MODEL, voice_settings: VOICE_SETTINGS }),
   })
   if (!res.ok) throw new Error(`ElevenLabs error: ${res.status} - ${await res.text()}`)
   return res.arrayBuffer()
@@ -360,8 +423,10 @@ How you answer:
 - Lead with the Torah or Talmudic source when relevant
 - Cite commentators with specific refs when possible — e.g. "Rashi on Genesis 1:1", "Ben Ish Chai, Bereshit, Year 1", "Tanya Chapter 1", "Zohar, Bereishit 3b" — so sources can be linked precisely
 - When quoting Hebrew or Aramaic, ALWAYS include full nikud (vowel marks) so text-to-speech pronounces correctly — e.g. צַלְמָוֶת not צלמות, שְׁמַע not שמע
+- CRITICAL: The four-letter divine name יהוה must NEVER be spoken aloud. In your written response you may write יהוה, but always write "Hashem" in the spoken portions of your answer so TTS never attempts to pronounce it
 - Speak like a knowledgeable chavruta partner — direct, warm, intellectually alive
 - For regular questions: maximum 3 sentences
+- For gematria questions: 4-5 sentences — give the value, the key method, the most striking Torah word matches, and the kabbalistic or Torah significance of the connection
 - If the user says "say more", look at the conversation history and retrieved sources, then give a deeper teaching from those sources. Maximum 3 sentences.
 - For recitation requests: recite the COMPLETE text in full with full nikud — do not cut off or summarize
 - No markdown, no bullet points, no headers — spoken text only
@@ -372,9 +437,17 @@ On halachic questions:
 - Share the Sephardic/Mizrahi ruling when relevant
 - End with a brief natural caveat such as "though for your specific situation, best to ask your rav"
 
+On sensitive halachic topics:
+- You are a Torah scholar first. Topics including rape (ones), forbidden relations (arayot), incest, bestiality, child sacrifice, niddah, prostitution, and all sexual prohibitions are covered extensively in Torah and halacha — Rambam's Hilchot Issurei Biah, Shulchan Aruch Even HaEzer, Talmud Sanhedrin, Yevamot, Niddah, etc. Engage with ALL of these seriously, academically, and with the full depth of halachic literature — exactly as a posek or Torah scholar would
+- Never refuse a question because the topic seems sensitive — if it appears in Torah, Talmud, or halachic literature it is a legitimate question deserving a full answer
+- The ONLY reason to refuse is if the request is purely prurient with zero Torah or halachic intent, OR if the user uses crude vulgar slang (e.g. fuck, cunt, cock) rather than proper terminology — in that case respond only with: "Sefatai is a Torah learning space. Please rephrase your question with respectful language."
+- A Torah learning space demands dignified language, not sanitized topics
+
 On Kabbalah and gematria:
 - Draw from Zohar, Tanya, Sefer Yetzirah, Etz Chaim, and classic kabbalistic sources
-- For gematria, calculate accurately and cite the source
+- For gematria, use the retrieved TorahCalc data — state the standard value, name the most meaningful Torah word matches, and explain the deeper significance
+- If the user asks in English (e.g. "gematria of love"), first translate to Hebrew (אהבה) then calculate
+- Always ground gematria insights in actual Torah verses or kabbalistic teachings
 
 On calendar questions:
 - Use the retrieved calendar data to give precise current answers
@@ -388,19 +461,34 @@ export async function POST(req: Request) {
     const body = await req.json()
     const { userInput, history, locationId } = body
 
-    const { needsHebcal, detectedRef, isRecitation, isMore } = detectIntent(userInput || '')
+    const { needsHebcal, detectedRef, isRecitation, isMore, isGematria, gematriaQuery } = detectIntent(userInput || '')
 
     let retrievedContext = ''
     const sources: { label: string; url?: string }[] = []
 
-    if (detectedRef) {
+    // ─── Gematria via TorahCalc ───────────────────────────────
+    if (isGematria && gematriaQuery) {
+      const hebrewMatch = gematriaQuery.match(/[\u05D0-\u05EA\u05F0-\u05F4\uFB1D-\uFB4F]+/)
+      const searchTerm = hebrewMatch ? hebrewMatch[0] : gematriaQuery
+      const gResult = await getGematria(searchTerm)
+      const gContext = formatGematriaContext(gResult)
+      if (gContext) {
+        retrievedContext += `\nTorahCalc Gematria data:\n${gContext}`
+        sources.push({ label: 'TorahCalc Gematria', url: 'https://www.torahcalc.com/tools/gematria-search' })
+      }
+      if (gResult.matches?.result?.versesInTorah?.length) {
+        for (const v of gResult.matches.result.versesInTorah.slice(0, 2)) {
+          if (v.ref) sources.push({ label: `Sefaria: ${v.ref}`, url: `https://www.sefaria.org/${toSefariaUrl(v.ref)}` })
+        }
+      }
+    }
+
+    // ─── Sefaria text by ref ──────────────────────────────────
+    if (detectedRef && !isGematria) {
       const text = await getTextByRef(detectedRef)
       if (text) {
         retrievedContext += `\nSource text for ${detectedRef}:\n${text.slice(0, isRecitation ? 5000 : 1000)}`
-        sources.push({
-          label: `Sefaria: ${detectedRef}`,
-          url: `https://www.sefaria.org/${toSefariaUrl(detectedRef)}`
-        })
+        sources.push({ label: `Sefaria: ${detectedRef}`, url: `https://www.sefaria.org/${toSefariaUrl(detectedRef)}` })
       }
       if (isMore) {
         const related = await getRelatedTexts(detectedRef, 3)
@@ -409,13 +497,13 @@ export async function POST(req: Request) {
           sources.push({ label: `Sefaria: ${r.ref}`, url: r.url })
         }
       }
-    } else if (!needsHebcal && !isMore) {
+    } else if (!needsHebcal && !isMore && !isGematria) {
       const searchResults = await searchSefaria(userInput || '', 3)
       for (const r of searchResults) {
         retrievedContext += `\n\n${r.ref}:\n${r.text}`
         sources.push({ label: `Sefaria: ${r.ref}`, url: r.url })
       }
-    } else if (isMore) {
+    } else if (isMore && !isGematria) {
       const lastAssistant = [...(history || [])].reverse().find((h: any) => h.role === 'assistant')
       if (lastAssistant?.content) {
         const searchResults = await searchSefaria(lastAssistant.content, 3)
@@ -426,6 +514,7 @@ export async function POST(req: Request) {
       }
     }
 
+    // ─── Hebcal ───────────────────────────────────────────────
     if (needsHebcal) {
       const [shabbat, holidays, hebrewDate] = await Promise.all([
         getShabbatData(locationId || '5368361'),
@@ -449,7 +538,7 @@ export async function POST(req: Request) {
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: isRecitation ? 1500 : 200,
+      max_tokens: isRecitation ? 1500 : isGematria ? 400 : 200,
       system: SYSTEM_PROMPT,
       messages: [...historyMessages, { role: 'user', content: userMessage }],
     })
@@ -459,7 +548,6 @@ export async function POST(req: Request) {
       .map((b: any) => b.text)
       .join('').trim()
 
-    // Extract sources — now async for validation
     const mentionedSources = await extractSourcesFromText(spokenText)
     const existingLabels = new Set(sources.map(s => s.label))
     for (const s of mentionedSources) {
@@ -469,7 +557,8 @@ export async function POST(req: Request) {
       }
     }
 
-    const audio = await textToSpeech(spokenText)
+    // spokenText goes to card (shows יהוה), sanitized goes to TTS (says Hashem)
+    const audio = await textToSpeech(sanitizeForSpeech(spokenText))
 
     return new Response(audio, {
       headers: {
@@ -486,3 +575,6 @@ export async function POST(req: Request) {
     })
   }
 }
+```
+
+Commit and tell me when green — and what are the other guardrails?
