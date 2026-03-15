@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
-import { SEFATAI_VOICE_ID, VOICE_SETTINGS, ELEVENLABS_MODEL } from '@/lib/voices'
+import { SEFATAI_VOICE_ID, VOICE_SETTINGS } from '@/lib/voices'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -219,7 +219,8 @@ const KNOWN_SOURCES: { pattern: RegExp; label: string; sefariaSlug: string }[] =
   { pattern: /\bTikunei Zohar\b/i, label: 'Tikunei Zohar', sefariaSlug: 'Tikunei_Zohar' },
   { pattern: /\bChovot HaLevavot\b|Duties of the Heart/i, label: 'Chovot HaLevavot', sefariaSlug: 'Chovot_HaLevavot' },
   { pattern: /\bMesillat Yesharim\b|\bMesilat Yesharim\b/i, label: 'Mesillat Yesharim', sefariaSlug: 'Mesillat_Yesharim' },
-{ pattern: /\bRamchal\b|\bLuzzatto\b/i, label: 'Ramchal', sefariaSlug: 'Moshe_Chaim_Luzzatto' },  { pattern: /\bDerech Hashem\b/i, label: 'Derech Hashem', sefariaSlug: 'Derech_Hashem' },
+  { pattern: /\bRamchal\b|\bLuzzatto\b/i, label: 'Ramchal', sefariaSlug: 'Moshe_Chaim_Luzzatto' },
+  { pattern: /\bDerech Hashem\b/i, label: 'Derech Hashem', sefariaSlug: 'Derech_Hashem' },
   { pattern: /\bDa.at Tevunot\b/i, label: "Da'at Tevunot", sefariaSlug: 'Daat_Tevunot' },
   { pattern: /\bOrchot Tzaddikim\b/i, label: 'Orchot Tzaddikim', sefariaSlug: 'Orchot_Tzaddikim' },
   { pattern: /\bSefer HaChinuch\b/i, label: 'Sefer HaChinuch', sefariaSlug: 'Sefer_HaChinuch' },
@@ -383,7 +384,6 @@ function sanitizeForSpeech(text: string): string {
     .replace(/ד׳/g, 'Hashem')
 
   // Hebrew letter names — ONLY when isolated next to = and a number
-  // e.g. "א = 1" but NOT inside Hebrew words like חמץ
   const letterNames: [string, string][] = [
     ['א', 'Alef'], ['ב', 'Bet'], ['ג', 'Gimel'], ['ד', 'Dalet'],
     ['ה', 'Hey'], ['ו', 'Vav'], ['ז', 'Zayin'], ['ח', 'Chet'],
@@ -405,9 +405,15 @@ function sanitizeForSpeech(text: string): string {
   return out
 }
 
-// ─── ElevenLabs TTS ───────────────────────────────────────────
+// ─── ElevenLabs TTS — smart model switcher ────────────────────
 
-async function textToSpeech(text: string): Promise<ArrayBuffer> {
+async function textToSpeech(text: string, highQuality = false): Promise<ArrayBuffer> {
+  // Recitations use v3 for best Hebrew pronunciation
+  // Everything else uses Flash for speed and cost
+  const model = highQuality
+    ? (process.env.ELEVENLABS_MODEL_ID || 'eleven_v3')
+    : 'eleven_flash_v2_5'
+
   const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${SEFATAI_VOICE_ID}`, {
     method: 'POST',
     headers: {
@@ -415,7 +421,7 @@ async function textToSpeech(text: string): Promise<ArrayBuffer> {
       'Content-Type': 'application/json',
       'Accept': 'audio/mpeg',
     },
-    body: JSON.stringify({ text, model_id: ELEVENLABS_MODEL, voice_settings: VOICE_SETTINGS }),
+    body: JSON.stringify({ text, model_id: model, voice_settings: VOICE_SETTINGS }),
   })
   if (!res.ok) throw new Error(`ElevenLabs error: ${res.status} - ${await res.text()}`)
   return res.arrayBuffer()
@@ -609,7 +615,8 @@ export async function POST(req: Request) {
       }
     }
 
-    const audio = await textToSpeech(sanitizeForSpeech(spokenText))
+    // Recitations use v3 for quality, everything else uses Flash for speed
+    const audio = await textToSpeech(sanitizeForSpeech(spokenText), isRecitation)
 
     return new Response(audio, {
       headers: {
