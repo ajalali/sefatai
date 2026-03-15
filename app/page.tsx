@@ -12,6 +12,7 @@ const LOADING_MESSAGES = [
 ]
 
 type AppState = 'idle' | 'loading' | 'playing' | 'recording'
+type Source = { label: string; url?: string }
 
 // ─── Debug (commented out — uncomment to re-enable) ───────────
 // const debugLines: string[] = []
@@ -39,7 +40,7 @@ export default function Home() {
   const [statusText, setStatusText] = useState('')
   const [transcript, setTranscript] = useState('')
   const [answer, setAnswer] = useState('')
-  const [copied, setCopied] = useState(false)
+  const [sources, setSources] = useState<Source[]>([])
 
   const historyRef = useRef<{ role: string; content: string }[]>([])
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -153,20 +154,6 @@ export default function Home() {
     ]
   }
 
-  // ─── Share ────────────────────────────────────────────────────
-  const handleShare = async () => {
-    const text = `${transcript ? `Q: ${transcript}\n\n` : ''}A: ${answer}\n\n— Sefatai (sefatai.vercel.app)`
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: 'Sefatai', text })
-      } catch { /* user cancelled */ }
-    } else {
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
   const speak = useCallback(async (userInput: string) => {
     stopAudio()
     startLoadingMessages()
@@ -180,6 +167,10 @@ export default function Home() {
       })
       if (!res.ok) throw new Error(`API ${res.status}`)
       const spokenText = decodeURIComponent(res.headers.get('X-Spoken-Text') || '')
+      const rawSources = res.headers.get('X-Sources')
+      if (rawSources) {
+        try { setSources(JSON.parse(decodeURIComponent(rawSources))) } catch { setSources([]) }
+      }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       stopLoadingMessages()
@@ -230,6 +221,7 @@ export default function Home() {
 
     setTranscript('')
     setAnswer('')
+    setSources([])
     await startRecording()
   }
 
@@ -293,17 +285,32 @@ export default function Home() {
             )}
 
             {answer && (
-              <>
-                <div className="bg-stone-900/60 border border-amber-900/40 rounded-2xl p-5 text-amber-100/80 text-sm leading-relaxed text-center max-h-64 overflow-y-auto">
-                  {answer}
-                </div>
-                <button
-                  onClick={handleShare}
-                  className="flex items-center gap-2 text-amber-400/60 hover:text-amber-300 text-xs uppercase tracking-widest transition-all"
-                >
-                  <span>{copied ? '✓ copied' : '↑ share'}</span>
-                </button>
-              </>
+              <div className="bg-stone-900/60 border border-amber-900/40 rounded-2xl p-5 text-amber-100/80 text-sm leading-relaxed text-center max-h-64 overflow-y-auto">
+                {answer}
+              </div>
+            )}
+
+            {sources.length > 0 && (
+              <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
+                <span className="text-stone-600 text-xs w-full text-center uppercase tracking-widest mb-1">sources</span>
+                {sources.map((s, i) => (
+                  s.url ? (
+                    
+                      key={i}
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-400/60 hover:text-blue-300 text-xs tracking-wide underline underline-offset-2 transition-colors"
+                    >
+                      {s.label}
+                    </a>
+                  ) : (
+                    <span key={i} className="text-stone-600 text-xs tracking-wide">
+                      {s.label}
+                    </span>
+                  )
+                ))}
+              </div>
             )}
           </>
         )}
