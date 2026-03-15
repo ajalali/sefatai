@@ -5,6 +5,21 @@ import { SEFATAI_VOICE_ID, VOICE_SETTINGS, ELEVENLABS_MODEL } from '@/lib/voices
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
+// ─── Sefaria URL helper ───────────────────────────────────────
+
+function toSefariaUrl(ref: string): string {
+  return ref.trim().replace(/:/g, '.').replace(/\s+/g, '_')
+}
+
+async function validateSefariaRef(ref: string, fallbackSlug: string): Promise<string> {
+  try {
+    const encoded = encodeURIComponent(toSefariaUrl(ref))
+    const res = await fetch(`https://www.sefaria.org/api/v3/texts/${encoded}`, { method: 'HEAD' })
+    if (res.ok) return `https://www.sefaria.org/${toSefariaUrl(ref)}`
+  } catch { /* fall through */ }
+  return `https://www.sefaria.org/${fallbackSlug}`
+}
+
 // ─── Intent detection ─────────────────────────────────────────
 
 function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string | null; isRecitation: boolean; isMore: boolean } {
@@ -107,12 +122,7 @@ function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string
 
   const refMatch = text.match(refRegex)
   let detectedRef: string | null = null
-  if (refMatch) {
-    let ref = refMatch[0].trim()
-    ref = ref.replace(/\s+/g, '_').replace(':', '.')
-    ref = ref.replace(/_(\d+)([ab])/, '.$1$2')
-    detectedRef = ref
-  }
+  if (refMatch) detectedRef = refMatch[0].trim()
 
   return { needsHebcal, detectedRef, isRecitation, isMore }
 }
@@ -160,15 +170,33 @@ const KNOWN_SOURCES: { pattern: RegExp; label: string; sefariaSlug: string }[] =
   { pattern: /\bShem MiShmuel\b/i, label: 'Shem MiShmuel', sefariaSlug: 'Shem_MiShmuel' },
 ]
 
-function extractSourcesFromText(text: string): { label: string; url: string }[] {
+// Extract specific refs from answer text e.g. "Rashi on Genesis 1:1"
+const SPECIFIC_REF_PATTERN = /(?:Rashi|Ramban|Ibn Ezra|Sforno|Radak|Nachmanides|Ohr HaChaim|Alshich|Rambam|Ben Ish Chai|Ben Ish Hai|Tanya|Zohar|Mishnah Berurah|Shulchan Aruch)\s+(?:on\s+)?(?:Genesis|Exodus|Leviticus|Numbers|Deuteronomy|Psalms|Proverbs|Isaiah|Berakhot|Shabbat|Chapter|Bereshit|Shemot)\s*[\d:ab.]+/gi
+
+async function extractSourcesFromText(text: string): Promise<{ label: string; url: string }[]> {
   const found: { label: string; url: string }[] = []
   const seen = new Set<string>()
+
+  // First try to extract specific refs like "Rashi on Genesis 1:1"
+  const specificRefs = text.match(SPECIFIC_REF_PATTERN) || []
+  for (const ref of specificRefs) {
+    if (seen.has(ref)) continue
+    seen.add(ref)
+    // Find the fallback slug from KNOWN_SOURCES
+    const source = KNOWN_SOURCES.find(s => s.pattern.test(ref.split(/\s+/)[0]))
+    const fallback = source?.sefariaSlug || 'texts'
+    const url = await validateSefariaRef(ref, fallback)
+    found.push({ label: ref, url })
+  }
+
+  // Then add general source mentions not already covered
   for (const source of KNOWN_SOURCES) {
     if (source.pattern.test(text) && !seen.has(source.label)) {
       seen.add(source.label)
       found.push({ label: source.label, url: `https://www.sefaria.org/${source.sefariaSlug}` })
     }
   }
+
   return found
 }
 
@@ -176,7 +204,7 @@ function extractSourcesFromText(text: string): { label: string; url: string }[] 
 
 async function getTextByRef(ref: string): Promise<string> {
   try {
-    const encoded = encodeURIComponent(ref)
+    const encoded = encodeURIComponent(toSefariaUrl(ref))
     const res = await fetch(`https://www.sefaria.org/api/v3/texts/${encoded}`)
     if (!res.ok) return ''
     const data = await res.json()
@@ -215,39 +243,38 @@ async function searchSefaria(query: string, limit = 3): Promise<{ ref: string; t
       size: limit,
       _source: ['ref', 'heRef', 'text', 'exact']
     }
-
     const res = await fetch('https://www.sefaria.org/api/search-wrapper/text/_search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-
     if (!res.ok) return []
     const data = await res.json()
     const hits = data?.hits?.hits || []
-
-    return hits.map((hit: any) => ({
-      ref: hit._source?.ref || '',
-      text: (hit._source?.exact || hit._source?.text || '').slice(0, 300),
-      url: `https://www.sefaria.org/${hit._source?.ref?.replace(/\s/g, '_') || ''}`,
-    })).filter((r: any) => r.ref && r.text)
+    return hits.map((hit: any) => {
+      const ref = hit._source?.ref || ''
+      return {
+        ref,
+        text: (hit._source?.exact || hit._source?.text || '').slice(0, 300),
+        url: `https://www.sefaria.org/${toSefariaUrl(ref)}`,
+      }
+    }).filter((r: any) => r.ref && r.text)
   } catch {
     return []
   }
 }
 
-// ─── Sefaria related texts for a ref ─────────────────────────
+// ─── Sefaria related texts ────────────────────────────────────
 
 async function getRelatedTexts(ref: string, limit = 3): Promise<{ ref: string; text: string; url: string }[]> {
   try {
-    const encoded = encodeURIComponent(ref)
+    const encoded = encodeURIComponent(toSefariaUrl(ref))
     const res = await fetch(`https://www.sefaria.org/api/related/${encoded}`)
     if (!res.ok) return []
     const data = await res.json()
     const links = (data?.links || [])
-      .filter((l: any) => l.category !== 'Commentary') // skip basic commentary, get richer links
+      .filter((l: any) => l.category !== 'Commentary')
       .slice(0, limit)
-
     const results: { ref: string; text: string; url: string }[] = []
     for (const link of links) {
       const linkRef = link.ref || link.anchorRef
@@ -257,7 +284,7 @@ async function getRelatedTexts(ref: string, limit = 3): Promise<{ ref: string; t
         results.push({
           ref: linkRef,
           text: text.slice(0, 300),
-          url: `https://www.sefaria.org/${linkRef.replace(/\s/g, '_')}`,
+          url: `https://www.sefaria.org/${toSefariaUrl(linkRef)}`,
         })
       }
     }
@@ -303,31 +330,9 @@ async function getHebrewDate(): Promise<string> {
   } catch { return '' }
 }
 
-// ─── Text chunking ────────────────────────────────────────────
+// ─── ElevenLabs TTS ───────────────────────────────────────────
 
-type Chunk = { text: string; lang: 'he' | 'en' }
-
-function chunkByLanguage(text: string): Chunk[] {
-  const parts = text.split(/(\s*[\u0590-\u05FF\uFB1D-\uFB4F][\u0590-\u05FF\uFB1D-\uFB4F\s]*\s*)/)
-  const chunks: Chunk[] = []
-  for (const part of parts) {
-    if (!part.trim()) continue
-    const isHebrew = /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(part)
-    const lang = isHebrew ? 'he' : 'en'
-    if (chunks.length > 0 && chunks[chunks.length - 1].lang === lang) {
-      chunks[chunks.length - 1].text += part
-    } else {
-      chunks.push({ text: part, lang })
-    }
-  }
-  return chunks.filter(c => c.text.trim().length > 0)
-}
-
-// ─── ElevenLabs TTS per chunk ─────────────────────────────────
-
-async function ttsChunk(text: string, lang: 'he' | 'en'): Promise<ArrayBuffer> {
-  const body: any = { text, model_id: ELEVENLABS_MODEL, voice_settings: VOICE_SETTINGS }
-  if (lang === 'he') body.language_code = 'he'
+async function textToSpeech(text: string): Promise<ArrayBuffer> {
   const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${SEFATAI_VOICE_ID}`, {
     method: 'POST',
     headers: {
@@ -335,23 +340,14 @@ async function ttsChunk(text: string, lang: 'he' | 'en'): Promise<ArrayBuffer> {
       'Content-Type': 'application/json',
       'Accept': 'audio/mpeg',
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      text,
+      model_id: ELEVENLABS_MODEL,
+      voice_settings: VOICE_SETTINGS,
+    }),
   })
   if (!res.ok) throw new Error(`ElevenLabs error: ${res.status} - ${await res.text()}`)
   return res.arrayBuffer()
-}
-
-// ─── Stitch audio ─────────────────────────────────────────────
-
-function stitchAudio(buffers: ArrayBuffer[]): ArrayBuffer {
-  const total = buffers.reduce((sum, b) => sum + b.byteLength, 0)
-  const result = new Uint8Array(total)
-  let offset = 0
-  for (const buf of buffers) {
-    result.set(new Uint8Array(buf), offset)
-    offset += buf.byteLength
-  }
-  return result.buffer
 }
 
 // ─── System prompt ────────────────────────────────────────────
@@ -362,11 +358,11 @@ Your role is to teach, explain, and illuminate Jewish texts, laws, concepts, pra
 
 How you answer:
 - Lead with the Torah or Talmudic source when relevant
-- Cite commentators naturally: Rashi, Rambam, Shulchan Aruch, Mishnah Berurah, Ben Ish Chai, Kaf HaChaim, Zohar, Tanya, etc.
+- Cite commentators with specific refs when possible — e.g. "Rashi on Genesis 1:1", "Ben Ish Chai, Bereshit, Year 1", "Tanya Chapter 1", "Zohar, Bereishit 3b" — so sources can be linked precisely
 - When quoting Hebrew or Aramaic, ALWAYS include full nikud (vowel marks) so text-to-speech pronounces correctly — e.g. צַלְמָוֶת not צלמות, שְׁמַע not שמע
 - Speak like a knowledgeable chavruta partner — direct, warm, intellectually alive
 - For regular questions: maximum 3 sentences
-- If the user says "say more", look at the conversation history and the retrieved sources, then give a deeper teaching drawing from those sources. Maximum 3 sentences.
+- If the user says "say more", look at the conversation history and retrieved sources, then give a deeper teaching from those sources. Maximum 3 sentences.
 - For recitation requests: recite the COMPLETE text in full with full nikud — do not cut off or summarize
 - No markdown, no bullet points, no headers — spoken text only
 - When reciting multiple verses, put each verse on its own line
@@ -402,46 +398,30 @@ export async function POST(req: Request) {
       if (text) {
         retrievedContext += `\nSource text for ${detectedRef}:\n${text.slice(0, isRecitation ? 5000 : 1000)}`
         sources.push({
-          label: `Sefaria: ${detectedRef.replace(/_/g, ' ')}`,
-          url: `https://www.sefaria.org/${detectedRef}`
+          label: `Sefaria: ${detectedRef}`,
+          url: `https://www.sefaria.org/${toSefariaUrl(detectedRef)}`
         })
       }
-
-      // For MORE — fetch related texts linked to the ref
       if (isMore) {
         const related = await getRelatedTexts(detectedRef, 3)
-        if (related.length > 0) {
-          retrievedContext += `\n\nRelated sources from Sefaria:\n`
-          for (const r of related) {
-            retrievedContext += `\n${r.ref}:\n${r.text}\n`
-            sources.push({ label: `Sefaria: ${r.ref}`, url: r.url })
-          }
+        for (const r of related) {
+          retrievedContext += `\n\n${r.ref}:\n${r.text}`
+          sources.push({ label: `Sefaria: ${r.ref}`, url: r.url })
         }
       }
-    } else if (!needsHebcal) {
-      // No specific ref — search Sefaria for relevant sources
-      // Skip search for "say more" since history has the context
-      if (!isMore) {
-        const searchResults = await searchSefaria(userInput || '', 3)
-        if (searchResults.length > 0) {
-          retrievedContext += `\nRelevant sources from Sefaria:\n`
-          for (const r of searchResults) {
-            retrievedContext += `\n${r.ref}:\n${r.text}\n`
-            sources.push({ label: `Sefaria: ${r.ref}`, url: r.url })
-          }
-        }
-      } else {
-        // MORE with no ref — search based on last assistant message in history
-        const lastAssistant = [...(history || [])].reverse().find((h: any) => h.role === 'assistant')
-        if (lastAssistant?.content) {
-          const searchResults = await searchSefaria(lastAssistant.content, 3)
-          if (searchResults.length > 0) {
-            retrievedContext += `\nAdditional sources from Sefaria:\n`
-            for (const r of searchResults) {
-              retrievedContext += `\n${r.ref}:\n${r.text}\n`
-              sources.push({ label: `Sefaria: ${r.ref}`, url: r.url })
-            }
-          }
+    } else if (!needsHebcal && !isMore) {
+      const searchResults = await searchSefaria(userInput || '', 3)
+      for (const r of searchResults) {
+        retrievedContext += `\n\n${r.ref}:\n${r.text}`
+        sources.push({ label: `Sefaria: ${r.ref}`, url: r.url })
+      }
+    } else if (isMore) {
+      const lastAssistant = [...(history || [])].reverse().find((h: any) => h.role === 'assistant')
+      if (lastAssistant?.content) {
+        const searchResults = await searchSefaria(lastAssistant.content, 3)
+        for (const r of searchResults) {
+          retrievedContext += `\n\n${r.ref}:\n${r.text}`
+          sources.push({ label: `Sefaria: ${r.ref}`, url: r.url })
         }
       }
     }
@@ -479,7 +459,8 @@ export async function POST(req: Request) {
       .map((b: any) => b.text)
       .join('').trim()
 
-    const mentionedSources = extractSourcesFromText(spokenText)
+    // Extract sources — now async for validation
+    const mentionedSources = await extractSourcesFromText(spokenText)
     const existingLabels = new Set(sources.map(s => s.label))
     for (const s of mentionedSources) {
       if (!existingLabels.has(s.label)) {
@@ -488,36 +469,9 @@ export async function POST(req: Request) {
       }
     }
 
-// CHUNKING_ENABLED env var — set to 'false' in Vercel to disable chunking
-    const chunkingEnabled = process.env.CHUNKING_ENABLED !== 'false'
-    const chunks = chunkByLanguage(spokenText)
-    let stitched: ArrayBuffer
+    const audio = await textToSpeech(spokenText)
 
-    if (!chunkingEnabled || (chunks.length === 1 && chunks[0].lang === 'en')) {
-      // Single call — no chunking
-      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${SEFATAI_VOICE_ID}`, {
-        method: 'POST',
-        headers: {
-          'xi-api-key': process.env.ELEVENLABS_API_KEY!,
-          'Content-Type': 'application/json',
-          'Accept': 'audio/mpeg',
-        },
-        body: JSON.stringify({ text: spokenText, model_id: ELEVENLABS_MODEL, voice_settings: VOICE_SETTINGS }),
-      })
-      if (!res.ok) throw new Error(`ElevenLabs error: ${res.status}`)
-      stitched = await res.arrayBuffer()
-    } else {
-      // Chunked — batch in groups of 4
-      const audioBuffers: ArrayBuffer[] = []
-      for (let i = 0; i < chunks.length; i += 4) {
-        const batch = chunks.slice(i, i + 4)
-        const batchBuffers = await Promise.all(batch.map(chunk => ttsChunk(chunk.text, chunk.lang)))
-        audioBuffers.push(...batchBuffers)
-      }
-      stitched = stitchAudio(audioBuffers)
-    }
-
-    return new Response(stitched, {
+    return new Response(audio, {
       headers: {
         'Content-Type': 'audio/mpeg',
         'X-Spoken-Text': encodeURIComponent(spokenText),
