@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import Image from 'next/image'
 
 const MAX_HISTORY = 6
@@ -20,6 +20,7 @@ export default function Home() {
   const [statusText, setStatusText] = useState('')
   const [transcript, setTranscript] = useState('')
   const [answer, setAnswer] = useState('')
+  const [answerKey, setAnswerKey] = useState(0)
   const [sources, setSources] = useState<Source[]>([])
   const [morePressed, setMorePressed] = useState(false)
 
@@ -159,6 +160,7 @@ export default function Home() {
       if (spokenText) {
         const isRefusal = spokenText.includes('cannot help with that') || spokenText.includes('Please rephrase')
         setAnswer(spokenText)
+        setAnswerKey(k => k + 1) // trigger animation on new answer
         if (isRefusal) {
           setTranscript('')
           historyRef.current = historyRef.current.slice(0, -1)
@@ -254,16 +256,18 @@ export default function Home() {
         ) : (
           <>
             <div className="relative flex items-center justify-center">
+              {/* Ripple rings — keyed to appState so they restart on each new search */}
               {appState === 'loading' && (
-                <>
+                <div key={`loading-${answerKey}`} className="absolute inset-0 flex items-center justify-center">
                   <div className="absolute rounded-full border border-amber-400/50 animate-ping"
                     style={{ width: '160px', height: '160px', animationDuration: '1s' }} />
                   <div className="absolute rounded-full border border-amber-300/30 animate-ping"
                     style={{ width: '195px', height: '195px', animationDuration: '1s', animationDelay: '0.25s' }} />
                   <div className="absolute rounded-full border border-amber-200/15 animate-ping"
                     style={{ width: '230px', height: '230px', animationDuration: '1s', animationDelay: '0.5s' }} />
-                </>
+                </div>
               )}
+
               <button
                 onClick={handleMicTap}
                 className={`w-36 h-36 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
@@ -291,7 +295,13 @@ export default function Home() {
             )}
 
             {answer && (
-              <div className="bg-stone-900/60 border border-amber-900/40 rounded-2xl p-5 text-amber-100/80 text-sm leading-relaxed text-center max-h-64 overflow-y-auto whitespace-pre-line">
+              <div
+                key={answerKey}
+                className="bg-stone-900/60 border border-amber-900/40 rounded-2xl p-5 text-amber-100/80 text-sm leading-relaxed text-center max-h-64 overflow-y-auto whitespace-pre-line"
+                style={{
+                  animation: 'answerReveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                }}
+              >
                 {answer}
               </div>
             )}
