@@ -23,6 +23,42 @@ function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string
   return { needsHebcal, detectedRef, isRecitation }
 }
 
+// ─── Source detection from answer text ───────────────────────
+
+const KNOWN_SOURCES: { pattern: RegExp; label: string; sefariaSlug: string }[] = [
+  { pattern: /\bRashi\b/i, label: 'Rashi', sefariaSlug: 'Rashi' },
+  { pattern: /\bRamban\b/i, label: 'Ramban', sefariaSlug: 'Ramban' },
+  { pattern: /\bRambam\b|Maimonides/i, label: 'Rambam', sefariaSlug: 'Rambam' },
+  { pattern: /\bRadak\b/i, label: 'Radak', sefariaSlug: 'Radak' },
+  { pattern: /\bIbn Ezra\b/i, label: 'Ibn Ezra', sefariaSlug: 'Ibn_Ezra' },
+  { pattern: /\bSforno\b/i, label: 'Sforno', sefariaSlug: 'Sforno' },
+  { pattern: /\bNachmanides\b/i, label: 'Nachmanides', sefariaSlug: 'Ramban' },
+  { pattern: /\bShulchan Aruch\b/i, label: 'Shulchan Aruch', sefariaSlug: 'Shulchan_Aruch' },
+  { pattern: /\bMishnah Berurah\b/i, label: 'Mishnah Berurah', sefariaSlug: 'Mishnah_Berurah' },
+  { pattern: /\bBen Ish Chai\b/i, label: 'Ben Ish Chai', sefariaSlug: 'Ben_Ish_Chai' },
+  { pattern: /\bKaf HaChaim\b/i, label: 'Kaf HaChaim', sefariaSlug: 'Kaf_HaChaim' },
+  { pattern: /\bTalmud\b|\bGemara\b/i, label: 'Talmud Bavli', sefariaSlug: 'Talmud' },
+  { pattern: /\bMishnah\b/i, label: 'Mishnah', sefariaSlug: 'Mishnah' },
+  { pattern: /\bMidrash\b/i, label: 'Midrash', sefariaSlug: 'Midrash' },
+  { pattern: /\bZohar\b/i, label: 'Zohar', sefariaSlug: 'Zohar' },
+  { pattern: /\bPirkei Avot\b/i, label: 'Pirkei Avot', sefariaSlug: 'Pirkei_Avot' },
+]
+
+function extractSourcesFromText(text: string): { label: string; url: string }[] {
+  const found: { label: string; url: string }[] = []
+  const seen = new Set<string>()
+  for (const source of KNOWN_SOURCES) {
+    if (source.pattern.test(text) && !seen.has(source.label)) {
+      seen.add(source.label)
+      found.push({
+        label: source.label,
+        url: `https://www.sefaria.org/${source.sefariaSlug}`
+      })
+    }
+  }
+  return found
+}
+
 // ─── Sefaria ──────────────────────────────────────────────────
 
 async function getTextByRef(ref: string): Promise<string> {
@@ -184,6 +220,7 @@ How you answer:
 - When quoting Hebrew or Aramaic, ALWAYS include full nikud (vowel marks) so text-to-speech pronounces correctly — e.g. צַלְמָוֶת not צלמות, שְׁמַע not שמע
 - Speak like a knowledgeable chavruta partner — direct, warm, intellectually alive
 - For regular questions: maximum 3 sentences
+- If the user says "say more", look at the conversation history and either: continue reciting where you left off if a text was being recited, or give a related teaching, commentary, or translation of what was just discussed. Maximum 3 sentences.
 - For recitation requests (recite, read, say, full psalm, full chapter, give me the verse): recite the COMPLETE text in full with full nikud on every word — do not cut off or summarize
 - No markdown, no bullet points, no headers — spoken text only
 - When reciting multiple verses, put each verse on its own line
@@ -216,7 +253,7 @@ export async function POST(req: Request) {
       if (text) {
         retrievedContext += `\nSource text for ${detectedRef}:\n${text.slice(0, isRecitation ? 5000 : 1000)}`
         sources.push({
-          label: detectedRef.replace(/\./g, ' '),
+          label: `Sefaria: ${detectedRef.replace(/\./g, ' ')}`,
           url: `https://www.sefaria.org/${detectedRef}`
         })
       }
@@ -257,7 +294,15 @@ export async function POST(req: Request) {
       .join('')
       .trim()
 
-    sources.push({ label: 'Claude (Anthropic)' })
+    // Extract sources mentioned in the answer
+    const mentionedSources = extractSourcesFromText(spokenText)
+    const existingLabels = new Set(sources.map(s => s.label))
+    for (const s of mentionedSources) {
+      if (!existingLabels.has(s.label)) {
+        sources.push(s)
+        existingLabels.add(s.label)
+      }
+    }
 
     // ─── Chunk + parallel TTS ─────────────────────────────────
     const chunks = chunkByLanguage(spokenText)
