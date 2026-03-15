@@ -405,14 +405,10 @@ function sanitizeForSpeech(text: string): string {
   return out
 }
 
-// ─── ElevenLabs TTS — smart model switcher ────────────────────
+// ─── ElevenLabs TTS — always v3 ───────────────────────────────
 
-async function textToSpeech(text: string, highQuality = false): Promise<ArrayBuffer> {
-  // Recitations use v3 for best Hebrew pronunciation
-  // Everything else uses Flash for speed and cost
-  const model = highQuality
-    ? (process.env.ELEVENLABS_MODEL_ID || 'eleven_v3')
-    : 'eleven_flash_v2_5'
+async function textToSpeech(text: string): Promise<ArrayBuffer> {
+  const model = process.env.ELEVENLABS_MODEL_ID || 'eleven_v3'
 
   const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${SEFATAI_VOICE_ID}`, {
     method: 'POST',
@@ -615,8 +611,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // Recitations use v3 for quality, everything else uses Flash for speed
-    const audio = await textToSpeech(sanitizeForSpeech(spokenText), isRecitation)
+    const audio = await textToSpeech(sanitizeForSpeech(spokenText))
 
     return new Response(audio, {
       headers: {
