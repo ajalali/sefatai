@@ -135,7 +135,6 @@ function detectIntent(text: string): {
   ]
   const isGematria = gematriaKeywords.some(k => lower.includes(k))
   const gematriaQuery = isGematria ? text : null
-
   const refMatch = text.match(REF_REGEX)
   const detectedRef = refMatch ? refMatch[0].trim() : null
 
@@ -237,7 +236,6 @@ async function extractSourcesFromText(text: string): Promise<{ label: string; ur
 
   const specificRefs = text.match(SPECIFIC_REF_PATTERN) || []
 
-  // Validate all specific refs in parallel
   await Promise.all(specificRefs.map(async (ref) => {
     if (seen.has(ref)) return
     seen.add(ref)
@@ -310,7 +308,7 @@ async function searchSefaria(query: string, limit = 3): Promise<{ ref: string; t
         text: (hit._source?.exact || hit._source?.text || '').slice(0, 300),
         url: `https://www.sefaria.org/${toSefariaUrl(ref)}`,
       }
-    .filter((r: { ref: string; text: string; url: string }) => r.text)
+    }).filter((r: any) => r.ref && r.text)
   } catch {
     return []
   }
@@ -325,16 +323,14 @@ async function getRelatedTexts(ref: string, limit = 3): Promise<{ ref: string; t
     if (!res.ok) return []
     const data = await res.json()
     const links = (data?.links || []).filter((l: any) => l.category !== 'Commentary').slice(0, limit)
-    const linkRefs = links.map((l: any) => l.ref || l.anchorRef).filter(Boolean)
-
+    const linkRefs: string[] = links.map((l: any) => l.ref || l.anchorRef).filter(Boolean)
     const texts = await Promise.all(linkRefs.map((linkRef: string) => getTextByRef(linkRef)))
-    return linkRefs
-      .map((linkRef: string, i: number) => ({
-        ref: linkRef,
-        text: texts[i].slice(0, 300),
-        url: `https://www.sefaria.org/${toSefariaUrl(linkRef)}`,
-      }))
-      .filter(r => r.text)
+    const results: { ref: string; text: string; url: string }[] = linkRefs.map((linkRef: string, i: number) => ({
+      ref: linkRef,
+      text: texts[i].slice(0, 300),
+      url: `https://www.sefaria.org/${toSefariaUrl(linkRef)}`,
+    }))
+    return results.filter(r => r.text)
   } catch {
     return []
   }
@@ -375,7 +371,6 @@ async function getHebrewDate(): Promise<string> {
 // ─── Speech sanitization ──────────────────────────────────────
 
 function sanitizeForSpeech(text: string): string {
-  // Divine name — possessive first, then bare
   let out = text
     .replace(/יהוה\s*'s/g, "Hashem's")
     .replace(/ה׳\s*'s/g, "Hashem's")
@@ -385,10 +380,8 @@ function sanitizeForSpeech(text: string): string {
     .replace(/ד׳/g, 'Hashem')
 
   // Hebrew letter names — Unicode-aware boundary matching
-  // \b doesn't work with Hebrew so we use lookarounds
-  const HB = '\\u05D0-\\u05EA\\u05F0-\\u05F4\\uFB1D-\\uFB4F' // Hebrew block
-  const notHB = `[^${HB}]`
-  const b = (char: string) => new RegExp(`(?<=${notHB}|^)${char}(?=${notHB}|$)`, 'g')
+  const HB = '\u05D0-\u05EA\u05F0-\u05F4\uFB1D-\uFB4F'
+  const b = (char: string) => new RegExp(`(?<=[^${HB}]|^)${char}(?=[^${HB}]|$)`, 'g')
 
   const letterNames: [RegExp, string][] = [
     [b('א'), 'Alef'],
@@ -547,7 +540,6 @@ export async function POST(req: Request) {
     let retrievedContext = ''
     const sources: { label: string; url?: string }[] = []
 
-    // ─── Gematria via TorahCalc ───────────────────────────────
     if (isGematria && gematriaQuery) {
       const hebrewMatch = gematriaQuery.match(/[\u05D0-\u05EA\u05F0-\u05F4\uFB1D-\uFB4F]+/)
       const searchTerm = hebrewMatch ? hebrewMatch[0] : gematriaQuery
@@ -564,7 +556,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // ─── Sefaria text by ref ──────────────────────────────────
     if (detectedRef && !isGematria) {
       const text = await getTextByRef(detectedRef)
       if (text) {
@@ -595,7 +586,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // ─── Hebcal ───────────────────────────────────────────────
     if (needsHebcal) {
       const [shabbat, holidays, hebrewDate] = await Promise.all([
         getShabbatData(locationId || '5368361'),
