@@ -1,8 +1,3 @@
-👉 **https://github.com/ajalali/sefatai/edit/main/app/api/chain/route.ts**
-
-Select all and replace with:
-
-```ts
 export const runtime = 'nodejs'
 
 import Anthropic from '@anthropic-ai/sdk'
@@ -12,7 +7,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 // ─── Intent detection ─────────────────────────────────────────
 
-function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string | null; isRecitation: boolean } {
+function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string | null; isRecitation: boolean; isMore: boolean } {
   const lower = text.toLowerCase()
 
   const calendarKeywords = [
@@ -23,8 +18,8 @@ function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string
     'next holiday', 'when is', 'what holiday', 'lag baomer', 'tisha bav'
   ]
   const needsHebcal = calendarKeywords.some(k => lower.includes(k))
-
   const isRecitation = /(recite|read out|read me|say|give me the verse|give me the text|give me the pasuk|full|whole|entire|complete|all of|psalm|tehillim|perek|chapter|parasha|portion|pasuk|possuk|verse|text of|words of)/i.test(lower)
+  const isMore = lower.trim() === 'say more'
 
   const tanakh = [
     'Genesis','Bereshit','Bereishit','Exodus','Shemot','Leviticus','Vayikra',
@@ -40,7 +35,6 @@ function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string
     'Ecclesiastes','Kohelet','Esther','Daniel','Ezra',
     'Nehemiah','Nechemiah','Chronicles','Divrei HaYamim',
   ]
-
   const talmud = [
     'Berakhot','Berachot','Brachot','Shabbat','Eruvin','Pesachim',
     'Shekalim','Yoma','Sukkah','Beitzah','Rosh Hashanah',
@@ -51,74 +45,52 @@ function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string
     'Zevachim','Menachot','Chullin','Bekhorot','Arakhin',
     'Temurah','Keritot','Meilah','Niddah',
   ]
-
-  const mishnah = [
-    'Pirkei Avot','Avot','Mishnah','Mishna',
-  ]
-
-  const rambam = [
-    'Rambam','Maimonides','Mishneh Torah','Hilchot','Hilkhot',
-  ]
-
+  const mishnah = ['Pirkei Avot','Avot','Mishnah','Mishna']
+  const rambam = ['Rambam','Maimonides','Mishneh Torah','Hilchot','Hilkhot']
   const shulchanAruch = [
     'Shulchan Aruch','Orach Chaim','Yoreh Deah',
     'Even HaEzer','Choshen Mishpat',
-    'Mishnah Berurah','Mishneh Berurah',
-    'Kitzur Shulchan Aruch',
+    'Mishnah Berurah','Mishneh Berurah','Kitzur Shulchan Aruch',
   ]
-
   const commentators = [
     'Rashi','Ramban','Ibn Ezra','Sforno','Radak',
     'Nachmanides','Abarbanel','Alshich','Ohr HaChaim',
   ]
-
   const kabbalah = [
     'Zohar','Tikunei Zohar','Zohar Chadash',
     'Sefer Yetzirah','Sefer HaBahir',
-    'Etz Chaim','Sha\'ar HaGilgulim',
+    'Etz Chaim',"Sha'ar HaGilgulim",
     'Tanya','Likutei Amarim','Likutey Amarim',
     'Likutei Torah','Torah Or',
-    'Pardes Rimonim',
-    'Pri Etz Chaim',
-    'Mevo Shearim',
+    'Pardes Rimonim','Pri Etz Chaim','Mevo Shearim',
   ]
-
   const gematria = [
     'Gematria','Mispar Gadol','Mispar Katan',
     'Mispar Siduri','Atbash','Albam',
     'Sefer Gematriot','Notarikon','Temurah',
   ]
-
   const mussar = [
     'Chovot HaLevavot','Duties of the Heart',
     'Mesillat Yesharim','Path of the Just',
-    'Orchot Tzaddikim',
-    'Shaarei Teshuva','Gates of Repentance',
-    'Sefer HaChinuch',
-    'Kuzari',
+    'Orchot Tzaddikim','Shaarei Teshuva',
+    'Sefer HaChinuch','Kuzari',
     'Moreh Nevuchim','Guide for the Perplexed',
-    'Nefesh HaChaim',
-    'Maharal',
-    'Sfat Emet',
-    'Shem MiShmuel',
-    'Ben Ish Chai','Ben Ish Hai',
-    'Ben Yehoyada',
-    'Kaf HaChaim',
+    'Nefesh HaChaim','Maharal','Sfat Emet',
+    'Shem MiShmuel','Ben Ish Chai','Ben Ish Hai',
+    'Ben Yehoyada','Kaf HaChaim',
   ]
-
   const midrash = [
     'Midrash Rabbah','Bereishit Rabbah','Shemot Rabbah',
     'Vayikra Rabbah','Bamidbar Rabbah','Devarim Rabbah',
     'Midrash Tanchuma','Tanchuma',
     'Pesikta Rabbati','Pesikta DeRav Kahana',
-    'Yalkut Shimoni',
-    'Midrash Tehillim',
+    'Yalkut Shimoni','Midrash Tehillim',
   ]
 
   const allSources = [
-    ...tanakh, ...talmud, ...mishnah,
-    ...rambam, ...shulchanAruch, ...commentators,
-    ...kabbalah, ...gematria, ...mussar, ...midrash,
+    ...tanakh, ...talmud, ...mishnah, ...rambam,
+    ...shulchanAruch, ...commentators, ...kabbalah,
+    ...gematria, ...mussar, ...midrash,
   ]
 
   const sourcePattern = allSources
@@ -135,7 +107,6 @@ function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string
 
   const refMatch = text.match(refRegex)
   let detectedRef: string | null = null
-
   if (refMatch) {
     let ref = refMatch[0].trim()
     ref = ref.replace(/\s+/g, '_').replace(':', '.')
@@ -143,13 +114,12 @@ function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string
     detectedRef = ref
   }
 
-  return { needsHebcal, detectedRef, isRecitation }
+  return { needsHebcal, detectedRef, isRecitation, isMore }
 }
 
 // ─── Source detection from answer text ───────────────────────
 
 const KNOWN_SOURCES: { pattern: RegExp; label: string; sefariaSlug: string }[] = [
-  // Commentators
   { pattern: /\bRashi\b/i, label: 'Rashi', sefariaSlug: 'Rashi' },
   { pattern: /\bRamban\b/i, label: 'Ramban', sefariaSlug: 'Ramban' },
   { pattern: /\bRambam\b|Maimonides/i, label: 'Rambam', sefariaSlug: 'Rambam' },
@@ -160,31 +130,24 @@ const KNOWN_SOURCES: { pattern: RegExp; label: string; sefariaSlug: string }[] =
   { pattern: /\bAbarbanel\b/i, label: 'Abarbanel', sefariaSlug: 'Abarbanel' },
   { pattern: /\bAlshich\b/i, label: 'Alshich', sefariaSlug: 'Alshich' },
   { pattern: /\bOhr HaChaim\b/i, label: 'Ohr HaChaim', sefariaSlug: 'Ohr_HaChaim' },
-  // Halacha
   { pattern: /\bShulchan Aruch\b/i, label: 'Shulchan Aruch', sefariaSlug: 'Shulchan_Aruch' },
   { pattern: /\bMishnah Berurah\b/i, label: 'Mishnah Berurah', sefariaSlug: 'Mishnah_Berurah' },
   { pattern: /\bBen Ish Chai\b|\bBen Ish Hai\b/i, label: 'Ben Ish Chai', sefariaSlug: 'Ben_Ish_Hai' },
   { pattern: /\bBen Yehoyada\b/i, label: 'Ben Yehoyada', sefariaSlug: 'Ben_Yehoyada' },
   { pattern: /\bKaf HaChaim\b/i, label: 'Kaf HaChaim', sefariaSlug: 'Kaf_HaChaim' },
   { pattern: /\bKitzur\b/i, label: 'Kitzur Shulchan Aruch', sefariaSlug: 'Kitzur_Shulchan_Aruch' },
-  // Talmud
   { pattern: /\bTalmud\b|\bGemara\b/i, label: 'Talmud Bavli', sefariaSlug: 'Talmud' },
   { pattern: /\bMishnah\b|\bMishna\b/i, label: 'Mishnah', sefariaSlug: 'Mishnah' },
   { pattern: /\bPirkei Avot\b|\bAvot\b/i, label: 'Pirkei Avot', sefariaSlug: 'Pirkei_Avot' },
-  // Midrash
   { pattern: /\bMidrash\b/i, label: 'Midrash', sefariaSlug: 'Midrash_Rabbah' },
   { pattern: /\bYalkut Shimoni\b/i, label: 'Yalkut Shimoni', sefariaSlug: 'Yalkut_Shimoni' },
   { pattern: /\bTanchuma\b/i, label: 'Midrash Tanchuma', sefariaSlug: 'Midrash_Tanchuma' },
-  // Kabbalah
   { pattern: /\bZohar\b/i, label: 'Zohar', sefariaSlug: 'Zohar' },
   { pattern: /\bTanya\b/i, label: 'Tanya', sefariaSlug: 'Tanya' },
   { pattern: /\bSefer Yetzirah\b/i, label: 'Sefer Yetzirah', sefariaSlug: 'Sefer_Yetzirah' },
   { pattern: /\bEtz Chaim\b/i, label: 'Etz Chaim', sefariaSlug: 'Etz_Chaim' },
   { pattern: /\bPardes Rimonim\b/i, label: 'Pardes Rimonim', sefariaSlug: 'Pardes_Rimonim' },
   { pattern: /\bTikunei Zohar\b/i, label: 'Tikunei Zohar', sefariaSlug: 'Tikunei_Zohar' },
-  { pattern: /\bSha.ar HaGilgulim\b/i, label: "Sha'ar HaGilgulim", sefariaSlug: 'Sha\'ar_HaGilgulim' },
-  { pattern: /\bPri Etz Chaim\b/i, label: 'Pri Etz Chaim', sefariaSlug: 'Pri_Etz_Chaim' },
-  // Mussar / Philosophy
   { pattern: /\bChovot HaLevavot\b|Duties of the Heart/i, label: 'Chovot HaLevavot', sefariaSlug: 'Chovot_HaLevavot' },
   { pattern: /\bMesillat Yesharim\b/i, label: 'Mesillat Yesharim', sefariaSlug: 'Mesillat_Yesharim' },
   { pattern: /\bOrchot Tzaddikim\b/i, label: 'Orchot Tzaddikim', sefariaSlug: 'Orchot_Tzaddikim' },
@@ -203,16 +166,13 @@ function extractSourcesFromText(text: string): { label: string; url: string }[] 
   for (const source of KNOWN_SOURCES) {
     if (source.pattern.test(text) && !seen.has(source.label)) {
       seen.add(source.label)
-      found.push({
-        label: source.label,
-        url: `https://www.sefaria.org/${source.sefariaSlug}`
-      })
+      found.push({ label: source.label, url: `https://www.sefaria.org/${source.sefariaSlug}` })
     }
   }
   return found
 }
 
-// ─── Sefaria ──────────────────────────────────────────────────
+// ─── Sefaria text by ref ──────────────────────────────────────
 
 async function getTextByRef(ref: string): Promise<string> {
   try {
@@ -220,29 +180,90 @@ async function getTextByRef(ref: string): Promise<string> {
     const res = await fetch(`https://www.sefaria.org/api/v3/texts/${encoded}`)
     if (!res.ok) return ''
     const data = await res.json()
-
     const heVersion = data?.versions?.find((v: any) => v.language === 'he')
     const enVersion = data?.versions?.find((v: any) => v.language === 'en')
-
     let heText = ''
     let enText = ''
-
     if (heVersion) {
       const raw = Array.isArray(heVersion.text) ? heVersion.text.flat() : [heVersion.text]
       heText = raw.filter(Boolean).join('\n')
     }
-
     if (enVersion) {
       const raw = Array.isArray(enVersion.text) ? enVersion.text.flat() : [enVersion.text]
       enText = raw.filter(Boolean).join('\n')
     }
-
     if (heText && enText) return `Hebrew:\n${heText}\n\nEnglish:\n${enText}`
     if (heText) return heText
     if (enText) return enText
     return ''
   } catch {
     return ''
+  }
+}
+
+// ─── Sefaria full-text search ─────────────────────────────────
+
+async function searchSefaria(query: string, limit = 3): Promise<{ ref: string; text: string; url: string }[]> {
+  try {
+    const body = {
+      query: {
+        query_string: {
+          query: query,
+          fields: ['exact', 'naive_lemmatizer']
+        }
+      },
+      size: limit,
+      _source: ['ref', 'heRef', 'text', 'exact']
+    }
+
+    const res = await fetch('https://www.sefaria.org/api/search-wrapper/text/_search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    if (!res.ok) return []
+    const data = await res.json()
+    const hits = data?.hits?.hits || []
+
+    return hits.map((hit: any) => ({
+      ref: hit._source?.ref || '',
+      text: (hit._source?.exact || hit._source?.text || '').slice(0, 300),
+      url: `https://www.sefaria.org/${hit._source?.ref?.replace(/\s/g, '_') || ''}`,
+    })).filter((r: any) => r.ref && r.text)
+  } catch {
+    return []
+  }
+}
+
+// ─── Sefaria related texts for a ref ─────────────────────────
+
+async function getRelatedTexts(ref: string, limit = 3): Promise<{ ref: string; text: string; url: string }[]> {
+  try {
+    const encoded = encodeURIComponent(ref)
+    const res = await fetch(`https://www.sefaria.org/api/related/${encoded}`)
+    if (!res.ok) return []
+    const data = await res.json()
+    const links = (data?.links || [])
+      .filter((l: any) => l.category !== 'Commentary') // skip basic commentary, get richer links
+      .slice(0, limit)
+
+    const results: { ref: string; text: string; url: string }[] = []
+    for (const link of links) {
+      const linkRef = link.ref || link.anchorRef
+      if (!linkRef) continue
+      const text = await getTextByRef(linkRef)
+      if (text) {
+        results.push({
+          ref: linkRef,
+          text: text.slice(0, 300),
+          url: `https://www.sefaria.org/${linkRef.replace(/\s/g, '_')}`,
+        })
+      }
+    }
+    return results
+  } catch {
+    return []
   }
 }
 
@@ -253,32 +274,21 @@ async function getShabbatData(geonameid = '5368361'): Promise<string> {
     const res = await fetch(`https://www.hebcal.com/shabbat?cfg=json&geonameid=${geonameid}&M=on&leyning=on`)
     if (!res.ok) return ''
     const data = await res.json()
-    const items = data?.items?.map((i: any) =>
-      `${i.category}: ${i.title}${i.date ? ' on ' + i.date : ''}`
-    ).join('. ')
-    return items || ''
-  } catch {
-    return ''
-  }
+    return data?.items?.map((i: any) => `${i.category}: ${i.title}${i.date ? ' on ' + i.date : ''}`).join('. ') || ''
+  } catch { return '' }
 }
 
 async function getHolidayData(): Promise<string> {
   try {
     const now = new Date()
-    const year = now.getFullYear()
     const res = await fetch(
-      `https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=on&mod=on&nx=on&year=${year}&month=x&tz=America/Los_Angeles&locale=en&c=on&geo=geoname&geonameid=5368361`
+      `https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=on&mod=on&nx=on&year=${now.getFullYear()}&month=x&tz=America/Los_Angeles&locale=en&c=on&geo=geoname&geonameid=5368361`
     )
     if (!res.ok) return ''
     const data = await res.json()
-    const upcoming = data?.items?.filter((i: any) => {
-      if (!i.date) return false
-      return new Date(i.date) >= now
-    }).slice(0, 10).map((i: any) => `${i.title} on ${i.date}`).join(', ')
-    return upcoming || ''
-  } catch {
-    return ''
-  }
+    return data?.items?.filter((i: any) => i.date && new Date(i.date) >= now)
+      .slice(0, 10).map((i: any) => `${i.title} on ${i.date}`).join(', ') || ''
+  } catch { return '' }
 }
 
 async function getHebrewDate(): Promise<string> {
@@ -290,9 +300,7 @@ async function getHebrewDate(): Promise<string> {
     if (!res.ok) return ''
     const data = await res.json()
     return data?.hdate || ''
-  } catch {
-    return ''
-  }
+  } catch { return '' }
 }
 
 // ─── Text chunking ────────────────────────────────────────────
@@ -302,7 +310,6 @@ type Chunk = { text: string; lang: 'he' | 'en' }
 function chunkByLanguage(text: string): Chunk[] {
   const parts = text.split(/(\s*[\u0590-\u05FF\uFB1D-\uFB4F][\u0590-\u05FF\uFB1D-\uFB4F\s]*\s*)/)
   const chunks: Chunk[] = []
-
   for (const part of parts) {
     if (!part.trim()) continue
     const isHebrew = /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(part)
@@ -313,42 +320,28 @@ function chunkByLanguage(text: string): Chunk[] {
       chunks.push({ text: part, lang })
     }
   }
-
   return chunks.filter(c => c.text.trim().length > 0)
 }
 
 // ─── ElevenLabs TTS per chunk ─────────────────────────────────
 
 async function ttsChunk(text: string, lang: 'he' | 'en'): Promise<ArrayBuffer> {
-  const body: any = {
-    text,
-    model_id: ELEVENLABS_MODEL,
-    voice_settings: VOICE_SETTINGS,
-  }
+  const body: any = { text, model_id: ELEVENLABS_MODEL, voice_settings: VOICE_SETTINGS }
   if (lang === 'he') body.language_code = 'he'
-
-  const res = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${SEFATAI_VOICE_ID}`,
-    {
-      method: 'POST',
-      headers: {
-        'xi-api-key': process.env.ELEVENLABS_API_KEY!,
-        'Content-Type': 'application/json',
-        'Accept': 'audio/mpeg',
-      },
-      body: JSON.stringify(body),
-    }
-  )
-
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`ElevenLabs error: ${res.status} - ${err}`)
-  }
-
+  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${SEFATAI_VOICE_ID}`, {
+    method: 'POST',
+    headers: {
+      'xi-api-key': process.env.ELEVENLABS_API_KEY!,
+      'Content-Type': 'application/json',
+      'Accept': 'audio/mpeg',
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`ElevenLabs error: ${res.status} - ${await res.text()}`)
   return res.arrayBuffer()
 }
 
-// ─── Stitch audio buffers ─────────────────────────────────────
+// ─── Stitch audio ─────────────────────────────────────────────
 
 function stitchAudio(buffers: ArrayBuffer[]): ArrayBuffer {
   const total = buffers.reduce((sum, b) => sum + b.byteLength, 0)
@@ -373,8 +366,8 @@ How you answer:
 - When quoting Hebrew or Aramaic, ALWAYS include full nikud (vowel marks) so text-to-speech pronounces correctly — e.g. צַלְמָוֶת not צלמות, שְׁמַע not שמע
 - Speak like a knowledgeable chavruta partner — direct, warm, intellectually alive
 - For regular questions: maximum 3 sentences
-- If the user says "say more", look at the conversation history and either: continue reciting where you left off if a text was being recited, or give a related teaching, commentary, or translation of what was just discussed. Maximum 3 sentences.
-- For recitation requests (recite, read, say, full psalm, full chapter, give me the verse): recite the COMPLETE text in full with full nikud on every word — do not cut off or summarize
+- If the user says "say more", look at the conversation history and the retrieved sources, then give a deeper teaching drawing from those sources. Maximum 3 sentences.
+- For recitation requests: recite the COMPLETE text in full with full nikud — do not cut off or summarize
 - No markdown, no bullet points, no headers — spoken text only
 - When reciting multiple verses, put each verse on its own line
 
@@ -382,12 +375,10 @@ On halachic questions:
 - Answer with the relevant sources and how the mainstream poskim rule
 - Share the Sephardic/Mizrahi ruling when relevant
 - End with a brief natural caveat such as "though for your specific situation, best to ask your rav"
-- Never refuse to engage with halachic questions — you are learned and helpful
 
-On Kabbalah and gematria questions:
+On Kabbalah and gematria:
 - Draw from Zohar, Tanya, Sefer Yetzirah, Etz Chaim, and classic kabbalistic sources
-- For gematria, calculate accurately and cite the source word or phrase
-- Explain kabbalistic concepts accessibly without being reductive
+- For gematria, calculate accurately and cite the source
 
 On calendar questions:
 - Use the retrieved calendar data to give precise current answers
@@ -401,7 +392,7 @@ export async function POST(req: Request) {
     const body = await req.json()
     const { userInput, history, locationId } = body
 
-    const { needsHebcal, detectedRef, isRecitation } = detectIntent(userInput || '')
+    const { needsHebcal, detectedRef, isRecitation, isMore } = detectIntent(userInput || '')
 
     let retrievedContext = ''
     const sources: { label: string; url?: string }[] = []
@@ -414,6 +405,44 @@ export async function POST(req: Request) {
           label: `Sefaria: ${detectedRef.replace(/_/g, ' ')}`,
           url: `https://www.sefaria.org/${detectedRef}`
         })
+      }
+
+      // For MORE — fetch related texts linked to the ref
+      if (isMore) {
+        const related = await getRelatedTexts(detectedRef, 3)
+        if (related.length > 0) {
+          retrievedContext += `\n\nRelated sources from Sefaria:\n`
+          for (const r of related) {
+            retrievedContext += `\n${r.ref}:\n${r.text}\n`
+            sources.push({ label: `Sefaria: ${r.ref}`, url: r.url })
+          }
+        }
+      }
+    } else if (!needsHebcal) {
+      // No specific ref — search Sefaria for relevant sources
+      // Skip search for "say more" since history has the context
+      if (!isMore) {
+        const searchResults = await searchSefaria(userInput || '', 3)
+        if (searchResults.length > 0) {
+          retrievedContext += `\nRelevant sources from Sefaria:\n`
+          for (const r of searchResults) {
+            retrievedContext += `\n${r.ref}:\n${r.text}\n`
+            sources.push({ label: `Sefaria: ${r.ref}`, url: r.url })
+          }
+        }
+      } else {
+        // MORE with no ref — search based on last assistant message in history
+        const lastAssistant = [...(history || [])].reverse().find((h: any) => h.role === 'assistant')
+        if (lastAssistant?.content) {
+          const searchResults = await searchSefaria(lastAssistant.content, 3)
+          if (searchResults.length > 0) {
+            retrievedContext += `\nAdditional sources from Sefaria:\n`
+            for (const r of searchResults) {
+              retrievedContext += `\n${r.ref}:\n${r.text}\n`
+              sources.push({ label: `Sefaria: ${r.ref}`, url: r.url })
+            }
+          }
+        }
       }
     }
 
@@ -448,8 +477,7 @@ export async function POST(req: Request) {
     const spokenText = message.content
       .filter((b: any) => b.type === 'text')
       .map((b: any) => b.text)
-      .join('')
-      .trim()
+      .join('').trim()
 
     const mentionedSources = extractSourcesFromText(spokenText)
     const existingLabels = new Set(sources.map(s => s.label))
@@ -461,31 +489,22 @@ export async function POST(req: Request) {
     }
 
     const chunks = chunkByLanguage(spokenText)
-
     let stitched: ArrayBuffer
+
     if (chunks.length === 1 && chunks[0].lang === 'en') {
-      const res = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${SEFATAI_VOICE_ID}`,
-        {
-          method: 'POST',
-          headers: {
-            'xi-api-key': process.env.ELEVENLABS_API_KEY!,
-            'Content-Type': 'application/json',
-            'Accept': 'audio/mpeg',
-          },
-          body: JSON.stringify({
-            text: spokenText,
-            model_id: ELEVENLABS_MODEL,
-            voice_settings: VOICE_SETTINGS,
-          }),
-        }
-      )
+      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${SEFATAI_VOICE_ID}`, {
+        method: 'POST',
+        headers: {
+          'xi-api-key': process.env.ELEVENLABS_API_KEY!,
+          'Content-Type': 'application/json',
+          'Accept': 'audio/mpeg',
+        },
+        body: JSON.stringify({ text: spokenText, model_id: ELEVENLABS_MODEL, voice_settings: VOICE_SETTINGS }),
+      })
       if (!res.ok) throw new Error(`ElevenLabs error: ${res.status}`)
       stitched = await res.arrayBuffer()
     } else {
-      const audioBuffers = await Promise.all(
-        chunks.map(chunk => ttsChunk(chunk.text, chunk.lang))
-      )
+      const audioBuffers = await Promise.all(chunks.map(chunk => ttsChunk(chunk.text, chunk.lang)))
       stitched = stitchAudio(audioBuffers)
     }
 
@@ -504,6 +523,3 @@ export async function POST(req: Request) {
     })
   }
 }
-```
-
-Commit and tell me when green!
