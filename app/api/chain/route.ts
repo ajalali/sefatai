@@ -1,9 +1,11 @@
 export const runtime = 'nodejs'
 
 import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 import { SEFATAI_VOICE_ID, VOICE_SETTINGS, ELEVENLABS_MODEL } from '@/lib/voices'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 // ─── Sefaria URL helper ───────────────────────────────────────
 
@@ -385,7 +387,6 @@ async function getHebrewDate(): Promise<string> {
 // ─── Speech sanitization ──────────────────────────────────────
 
 function sanitizeForSpeech(text: string): string {
-  // Divine name must never be pronounced — say Hashem instead
   return text
     .replace(/יהוה/g, 'Hashem')
     .replace(/ה׳/g, 'Hashem')
@@ -448,6 +449,57 @@ On calendar questions:
 - Use the retrieved calendar data to give precise current answers
 
 Never introduce yourself. Never give a welcome message. Just answer.`
+
+// ─── Generate Torah answer with fallback ─────────────────────
+
+async function generateAnswer(
+  historyMessages: any[],
+  userMessage: string,
+  maxTokens: number
+): Promise<string> {
+
+  // Primary: Claude Sonnet 4
+  try {
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: maxTokens,
+      system: SYSTEM_PROMPT,
+      messages: [...historyMessages, { role: 'user', content: userMessage }],
+    })
+    const result = message.content
+      .filter((b: any) => b.type === 'text')
+      .map((b: any) => b.text)
+      .join('').trim()
+    if (result) return result
+  } catch (e) {
+    console.warn('Sonnet failed, falling back to GPT-4.1:', e)
+  }
+
+  // Fallback: GPT-4.1
+  try {
+    const completion = await openaiClient.chat.completions.create({
+      model: 'gpt-4.1',
+      max_tokens: maxTokens,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...historyMessages.map((h: any) => ({
+          role: h.role as 'user' | 'assistant',
+          content: h.content,
+        })),
+        { role: 'user', content: userMessage },
+      ],
+    })
+    const result = completion.choices[0]?.message?.content?.trim() || ''
+    if (result) {
+      console.log('Answered with GPT-4.1 fallback')
+      return result
+    }
+  } catch (e) {
+    console.warn('GPT-4.1 fallback failed:', e)
+  }
+
+  throw new Error('All models failed to generate a response')
+}
 
 // ─── Main handler ─────────────────────────────────────────────
 
@@ -530,18 +582,9 @@ export async function POST(req: Request) {
     }))
 
     const userMessage = `${userInput}${retrievedContext ? `\n\n[Retrieved data:${retrievedContext}]` : ''}`
+    const maxTokens = isRecitation ? 1500 : isGematria ? 400 : 200
 
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: isRecitation ? 1500 : isGematria ? 400 : 200,
-      system: SYSTEM_PROMPT,
-      messages: [...historyMessages, { role: 'user', content: userMessage }],
-    })
-
-    const spokenText = message.content
-      .filter((b: any) => b.type === 'text')
-      .map((b: any) => b.text)
-      .join('').trim()
+    const spokenText = await generateAnswer(historyMessages, userMessage, maxTokens)
 
     const mentionedSources = await extractSourcesFromText(spokenText)
     const existingLabels = new Set(sources.map(s => s.label))
@@ -552,7 +595,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // spokenText goes to card (shows יהוה), sanitized goes to TTS (says Hashem)
     const audio = await textToSpeech(sanitizeForSpeech(spokenText))
 
     return new Response(audio, {
