@@ -4,16 +4,46 @@ import Anthropic from '@anthropic-ai/sdk'
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-const SYSTEM = `You are a Jewish text transcription normalizer. You receive a raw voice transcript that may contain mispronounced or phonetically spelled Hebrew names, places, books, and concepts. Your job is to:
+const SYSTEM = `You are a transcript normalizer for a Jewish learning voice app. You receive a short voice transcript (1-3 sentences max) and return ONLY the corrected transcript.
 
-1. Fix mispronounced Hebrew names to their correct English transliteration — e.g. "moshen" → "Moshe", "moishe" → "Moshe", "avrohom" → "Avraham", "bereishis" → "Bereishit", "shabbos" → "Shabbat" (keep Ashkenazi if clearly intended)
-2. Add the Hebrew in parentheses for key proper nouns — e.g. "Moshe (מֹשֶׁה)", "Avraham (אַבְרָהָם)", "Torah (תּוֹרָה)"
-3. Fix book names — "bereishis" → "Bereishit", "tehillim" → "Tehillim (Psalms)"
-4. Fix rabbi names — "the rambam" → "the Rambam", "rav kook" → "Rav Kook", "bnai schai" → "Ben Ish Chai", "ramchal" → "Ramchal"
-5. Keep the meaning and intent of the question exactly — only fix names and entities, never rewrite the question
-6. If nothing needs fixing, return the transcript unchanged
+RULES:
+- Return ONLY the corrected transcript text. Nothing else.
+- Do NOT explain what you did
+- Do NOT say "I can help if..." or "I don't have access to..."
+- Do NOT add bullet points, options, or commentary
+- Do NOT respond conversationally
+- If the transcript is already correct, return it unchanged
+- If you are unsure, return the original transcript unchanged
 
-Return ONLY the normalized transcript — no explanation, no preamble.`
+CORRECTIONS TO MAKE:
+1. Fix mispronounced Hebrew names — e.g. "moshen" → "Moshe", "avrohom" → "Avraham", "bereishis" → "Bereishit", "shabbos" → "Shabbat", "bnai schai" → "Ben Ish Chai", "ramchal" → "Ramchal"
+2. Add Hebrew in parentheses for key proper nouns — e.g. "Moshe (מֹשֶׁה)", "Torah (תּוֹרָה)"
+3. Fix book names — "bereishis" → "Bereishit", "tehillim" → "Tehillim"
+4. Fix rabbi names — "the rambam" → "the Rambam", "rav kook" → "Rav Kook"
+5. Keep the meaning and intent exactly — only fix names, never rewrite the question
+
+EXAMPLE INPUT: "what does the rambam say about teshuva"
+EXAMPLE OUTPUT: "What does the Rambam say about teshuva (תְּשׁוּבָה)?"
+
+EXAMPLE INPUT: "tell me about shabbos candles"
+EXAMPLE OUTPUT: "Tell me about Shabbat candles."
+
+EXAMPLE INPUT: "what is the daf yomi today"
+EXAMPLE OUTPUT: "What is the Daf Yomi today?"`
+
+function isSafeNormalization(raw: string, normalized: string): boolean {
+  // If normalized is more than 2x the length of raw, Haiku went rogue
+  if (normalized.length > raw.length * 2) return false
+  // If it contains these phrases, it's a conversational response not a normalization
+  const badPhrases = [
+    'i can help', 'i don\'t have', 'i do not have', 'please provide',
+    'could you', 'would you', 'let me know', 'happy to help',
+    'normalization', 'transcript', 'clarify', 'confusion',
+    'bullet', '- the', 'however,'
+  ]
+  const lower = normalized.toLowerCase()
+  return !badPhrases.some(p => lower.includes(p))
+}
 
 async function normalizeTranscript(raw: string): Promise<string> {
 
@@ -26,7 +56,8 @@ async function normalizeTranscript(raw: string): Promise<string> {
       messages: [{ role: 'user', content: raw }],
     })
     const result = message.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('').trim()
-    if (result) return result
+    if (result && isSafeNormalization(raw, result)) return result
+    console.warn('Haiku normalization failed safety check, trying Sonnet')
   } catch (e) {
     console.warn('Haiku failed, trying Sonnet:', e)
   }
@@ -40,7 +71,8 @@ async function normalizeTranscript(raw: string): Promise<string> {
       messages: [{ role: 'user', content: raw }],
     })
     const result = message.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('').trim()
-    if (result) return result
+    if (result && isSafeNormalization(raw, result)) return result
+    console.warn('Sonnet normalization failed safety check, trying GPT-4o-mini')
   } catch (e) {
     console.warn('Sonnet failed, trying GPT-4o-mini:', e)
   }
@@ -56,11 +88,12 @@ async function normalizeTranscript(raw: string): Promise<string> {
       ],
     })
     const result = completion.choices[0]?.message?.content?.trim()
-    if (result) return result
+    if (result && isSafeNormalization(raw, result)) return result
   } catch (e) {
     console.warn('GPT-4o-mini failed, returning raw:', e)
   }
 
+  // Safe fallback — return original
   return raw
 }
 
