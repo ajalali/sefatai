@@ -289,7 +289,7 @@ export default function Home() {
             )}
 
             {answer && (
-              <div className="bg-stone-900/60 border border-amber-900/40 rounded-2xl p-5 text-amber-100/80 text-sm leading-relaxed text-center max-h-64 overflow-y-auto">
+              <div className="bg-stone-900/60 border border-amber-900/40 rounded-2xl p-5 text-amber-100/80 text-sm leading-relaxed text-center max-h-64 overflow-y-auto whitespace-pre-line">
                 {answer}
               </div>
             )}
