@@ -1,72 +1,60 @@
-export const runtime = 'nodejs'
+import OpenAI from 'openai'
+import Anthropic from '@anthropic-ai/sdk'
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+// ─── Normalize transcript with Haiku ─────────────────────────
+
+async function normalizeTranscript(raw: string): Promise<string> {
+  const message = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 200,
+    system: `You are a Jewish text transcription normalizer. You receive a raw voice transcript that may contain mispronounced or phonetically spelled Hebrew names, places, books, and concepts. Your job is to:
+
+1. Fix mispronounced Hebrew names to their correct English transliteration — e.g. "moshen" → "Moshe", "moishe" → "Moshe", "avrohom" → "Avraham", "bereishis" → "Bereishit", "shabbos" → "Shabbat" (keep Ashkenazi if clearly intended)
+2. Add the Hebrew in parentheses for key proper nouns — e.g. "Moshe (מֹשֶׁה)", "Avraham (אַבְרָהָם)", "Torah (תּוֹרָה)"
+3. Fix book names — "bereishis" → "Bereishit", "tehillim" → "Tehillim (Psalms)"
+4. Fix rabbi names — "the rambam" → "the Rambam", "rav kook" → "Rav Kook"
+5. Keep the meaning and intent of the question exactly — only fix names and entities, never rewrite the question
+6. If nothing needs fixing, return the transcript unchanged
+
+Return ONLY the normalized transcript — no explanation, no preamble.`,
+    messages: [{ role: 'user', content: raw }],
+  })
+
+  const normalized = message.content
+    .filter((b: any) => b.type === 'text')
+    .map((b: any) => b.text)
+    .join('').trim()
+
+  return normalized || raw
+}
+
+// ─── Main handler ─────────────────────────────────────────────
 
 export async function POST(req: Request) {
   try {
-    const formData = await req.formData()
-    const audio = formData.get('audio') as Blob
-    if (!audio) return new Response(JSON.stringify({ error: 'no audio' }), { status: 400 })
+    const form = await req.formData()
+    const audio = form.get('audio') as File
+    if (!audio) return Response.json({ error: 'No audio' }, { status: 400 })
 
-    const arrayBuffer = await audio.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-
-    const boundary = '----WebKitFormBoundary' + Math.random().toString(36).slice(2)
-    const mimeType = audio.type || 'audio/webm'
-    const ext = mimeType.includes('mp4') ? 'mp4' : 'webm'
-
-    // Sample Torah/Talmud conversation as prompt — Whisper uses this to
-    // recognize Hebrew, Aramaic, and mixed-language Torah study speech
-    const whisperPrompt = `Jewish Torah and Talmud study session. The speaker mixes English with Hebrew and Aramaic words and complete phrases.
-Examples of what the speaker might say:
-"What does Rashi say on Bereshit aleph aleph?"
-"How many times does asarah tefachim appear in the Gemara?"
-"Kol Yisrael yesh lahem chelek b'olam haba — what is the source?"
-"Explain the machlokes between Abaye and Rava on this sugya."
-"What is the halacha l'maaseh regarding eruv in a reshut harabim?"
-"Amar Rav Yosef, teku, kashya, uvda d'rav — these are common Aramaic terms."
-"The Mishnah in Pirkei Avot says ben zoma omer, eizehu chacham."
-"What does lo tachmod mean and how is it different from lo titaveh?"
-"Explain bein hashmashot and the safek of Shabbat."
-"The Rambam paskens in Hilchot Shabbat, perek aleph, halacha aleph."
-Hebrew books: Bereshit, Shemot, Vayikra, Bamidbar, Devarim, Tehillim, Mishlei.
-Aramaic terms: amar, teku, kashya, uvda, de'oraita, derabanan, gemara, sugya, masechet.`
-
-    const header = Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.${ext}"\r\nContent-Type: ${mimeType}\r\n\r\n`
-    )
-    const modelPart = Buffer.from(
-      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n`
-    )
-    const langPart = Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\nen\r\n`
-    )
-    const promptPart = Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="prompt"\r\n\r\n${whisperPrompt}\r\n`
-    )
-    const footer = Buffer.from(`--${boundary}--\r\n`)
-
-    const body = Buffer.concat([header, buffer, modelPart, langPart, promptPart, footer])
-
-    const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-      },
-      body,
+    const transcription = await openai.audio.transcriptions.create({
+      file: audio,
+      model: 'whisper-1',
+      prompt: 'Torah, Talmud, Shabbat, Rashi, Rambam, Mishnah, Gemara, parasha, mitzvah, Hashem, Moshe, Avraham, Yitzchak, Yaakov, Hebrew, Aramaic, halacha, gematria, Zohar, Kabbalah, tefillin, mezuzah, kashrut, Pesach, Sukkot, Shavuot',
+      language: 'en',
     })
 
-    if (!res.ok) {
-      const err = await res.text()
-      throw new Error(`Whisper error: ${res.status} ${err}`)
-    }
+    const raw = transcription.text?.trim() || ''
+    if (!raw) return Response.json({ transcript: '' })
 
-    const data = await res.json()
-    const transcript = data?.text || ''
-    return new Response(JSON.stringify({ transcript }), {
-      headers: { 'Content-Type': 'application/json' },
-    })
-  } catch (e) {
-    console.error(e)
-    return new Response(JSON.stringify({ error: String(e) }), { status: 500 })
+    // Normalize with Haiku — fast and cheap
+    const normalized = await normalizeTranscript(raw)
+
+    return Response.json({ transcript: normalized, raw })
+  } catch (err) {
+    console.error('Transcribe error:', err)
+    return Response.json({ error: String(err) }, { status: 500 })
   }
 }
