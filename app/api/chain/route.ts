@@ -70,13 +70,14 @@ const KABBALAH = [
 const GEMATRIA_BOOKS = ['Sefer Gematriot','Notarikon']
 const MUSSAR = [
   'Chovot HaLevavot','Duties of the Heart',
-  'Mesillat Yesharim','Path of the Just',
+  'Mesillat Yesharim','Mesilat Yesharim','Path of the Just',
   'Orchot Tzaddikim','Shaarei Teshuva',
   'Sefer HaChinuch','Kuzari',
   'Moreh Nevuchim','Guide for the Perplexed',
   'Nefesh HaChaim','Maharal','Sfat Emet',
   'Shem MiShmuel','Ben Ish Chai','Ben Ish Hai',
   'Ben Yehoyada','Kaf HaChaim',
+  'Ramchal','Luzzatto','Derech Hashem',"Da'at Tevunot",
 ]
 const MIDRASH = [
   'Midrash Rabbah','Bereishit Rabbah','Shemot Rabbah',
@@ -217,7 +218,10 @@ const KNOWN_SOURCES: { pattern: RegExp; label: string; sefariaSlug: string }[] =
   { pattern: /\bPardes Rimonim\b/i, label: 'Pardes Rimonim', sefariaSlug: 'Pardes_Rimonim' },
   { pattern: /\bTikunei Zohar\b/i, label: 'Tikunei Zohar', sefariaSlug: 'Tikunei_Zohar' },
   { pattern: /\bChovot HaLevavot\b|Duties of the Heart/i, label: 'Chovot HaLevavot', sefariaSlug: 'Chovot_HaLevavot' },
-  { pattern: /\bMesillat Yesharim\b/i, label: 'Mesillat Yesharim', sefariaSlug: 'Mesillat_Yesharim' },
+  { pattern: /\bMesillat Yesharim\b|\bMesilat Yesharim\b/i, label: 'Mesillat Yesharim', sefariaSlug: 'Mesillat_Yesharim' },
+  { pattern: /\bRamchal\b|\bLuzzatto\b/i, label: 'Ramchal', sefariaSlug: 'Ramchal' },
+  { pattern: /\bDerech Hashem\b/i, label: 'Derech Hashem', sefariaSlug: 'Derech_Hashem' },
+  { pattern: /\bDa.at Tevunot\b/i, label: "Da'at Tevunot", sefariaSlug: 'Daat_Tevunot' },
   { pattern: /\bOrchot Tzaddikim\b/i, label: 'Orchot Tzaddikim', sefariaSlug: 'Orchot_Tzaddikim' },
   { pattern: /\bSefer HaChinuch\b/i, label: 'Sefer HaChinuch', sefariaSlug: 'Sefer_HaChinuch' },
   { pattern: /\bKuzari\b/i, label: 'Kuzari', sefariaSlug: 'Kuzari' },
@@ -228,7 +232,7 @@ const KNOWN_SOURCES: { pattern: RegExp; label: string; sefariaSlug: string }[] =
   { pattern: /\bShem MiShmuel\b/i, label: 'Shem MiShmuel', sefariaSlug: 'Shem_MiShmuel' },
 ]
 
-const SPECIFIC_REF_PATTERN = /(?:Rashi|Ramban|Ibn Ezra|Sforno|Radak|Nachmanides|Ohr HaChaim|Alshich|Rambam|Ben Ish Chai|Ben Ish Hai|Tanya|Zohar|Mishnah Berurah|Shulchan Aruch)\s+(?:on\s+)?(?:Genesis|Exodus|Leviticus|Numbers|Deuteronomy|Psalms|Proverbs|Isaiah|Berakhot|Shabbat|Chapter|Bereshit|Shemot)\s*[\d:ab.]+/gi
+const SPECIFIC_REF_PATTERN = /(?:Rashi|Ramban|Ibn Ezra|Sforno|Radak|Nachmanides|Ohr HaChaim|Alshich|Rambam|Ben Ish Chai|Ben Ish Hai|Tanya|Zohar|Mishnah Berurah|Shulchan Aruch|Ramchal)\s+(?:on\s+)?(?:Genesis|Exodus|Leviticus|Numbers|Deuteronomy|Psalms|Proverbs|Isaiah|Berakhot|Shabbat|Chapter|Bereshit|Shemot)\s*[\d:ab.]+/gi
 
 async function extractSourcesFromText(text: string): Promise<{ label: string; url: string }[]> {
   const found: { label: string; url: string }[] = []
@@ -379,42 +383,24 @@ function sanitizeForSpeech(text: string): string {
     .replace(/ה׳/g, 'Hashem')
     .replace(/ד׳/g, 'Hashem')
 
-  // Hebrew letter names — Unicode-aware boundary matching
-  const HB = '\u05D0-\u05EA\u05F0-\u05F4\uFB1D-\uFB4F'
-  const b = (char: string) => new RegExp(`(?<=[^${HB}]|^)${char}(?=[^${HB}]|$)`, 'g')
-
-  const letterNames: [RegExp, string][] = [
-    [b('א'), 'Alef'],
-    [b('ב'), 'Bet'],
-    [b('ג'), 'Gimel'],
-    [b('ד'), 'Dalet'],
-    [b('ה'), 'Hey'],
-    [b('ו'), 'Vav'],
-    [b('ז'), 'Zayin'],
-    [b('ח'), 'Chet'],
-    [b('ט'), 'Tet'],
-    [b('י'), 'Yod'],
-    [b('כ'), 'Kaf'],
-    [b('ך'), 'Kaf Sofit'],
-    [b('ל'), 'Lamed'],
-    [b('מ'), 'Mem'],
-    [b('ם'), 'Mem Sofit'],
-    [b('נ'), 'Nun'],
-    [b('ן'), 'Nun Sofit'],
-    [b('ס'), 'Samech'],
-    [b('ע'), 'Ayin'],
-    [b('פ'), 'Peh'],
-    [b('ף'), 'Peh Sofit'],
-    [b('צ'), 'Tzadi'],
-    [b('ץ'), 'Tzadi Sofit'],
-    [b('ק'), 'Kuf'],
-    [b('ר'), 'Resh'],
-    [b('ש'), 'Shin'],
-    [b('ת'), 'Tav'],
+  // Hebrew letter names — ONLY when isolated next to = and a number
+  // e.g. "א = 1" but NOT inside Hebrew words like חמץ
+  const letterNames: [string, string][] = [
+    ['א', 'Alef'], ['ב', 'Bet'], ['ג', 'Gimel'], ['ד', 'Dalet'],
+    ['ה', 'Hey'], ['ו', 'Vav'], ['ז', 'Zayin'], ['ח', 'Chet'],
+    ['ט', 'Tet'], ['י', 'Yod'], ['כ', 'Kaf'], ['ך', 'Kaf Sofit'],
+    ['ל', 'Lamed'], ['מ', 'Mem'], ['ם', 'Mem Sofit'], ['נ', 'Nun'],
+    ['ן', 'Nun Sofit'], ['ס', 'Samech'], ['ע', 'Ayin'], ['פ', 'Peh'],
+    ['ף', 'Peh Sofit'], ['צ', 'Tzadi'], ['ץ', 'Tzadi Sofit'],
+    ['ק', 'Kuf'], ['ר', 'Resh'], ['ש', 'Shin'], ['ת', 'Tav'],
   ]
 
-  for (const [pattern, name] of letterNames) {
-    out = out.replace(pattern, name)
+  for (const [char, name] of letterNames) {
+    const escaped = char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    out = out.replace(
+      new RegExp(`(?<![\\u05D0-\\u05EA])${escaped}(?![\\u05D0-\\u05EA])\\s*=\\s*(\\d+)`, 'g'),
+      `${name} = $1`
+    )
   }
 
   return out
@@ -444,7 +430,7 @@ Your role is to teach, explain, and illuminate Jewish texts, laws, concepts, pra
 
 How you answer:
 - Lead with the Torah or Talmudic source when relevant
-- Cite commentators with specific refs when possible — e.g. "Rashi on Genesis 1:1", "Ben Ish Chai, Bereshit, Year 1", "Tanya Chapter 1", "Zohar, Bereishit 3b" — so sources can be linked precisely
+- Cite commentators with specific refs when possible — e.g. "Rashi on Genesis 1:1", "Ben Ish Chai, Bereshit, Year 1", "Tanya Chapter 1", "Zohar, Bereishit 3b", "Ramchal in Mesillat Yesharim Chapter 1" — so sources can be linked precisely
 - When quoting Hebrew or Aramaic, ALWAYS include full nikud (vowel marks) so text-to-speech pronounces correctly — e.g. צַלְמָוֶת not צלמות, שְׁמַע not שמע
 - CRITICAL: The four-letter divine name יהוה must NEVER be spoken aloud. In your written response you may write יהוה, but always write "Hashem" in the spoken portions of your answer so TTS never attempts to pronounce it
 - Speak like a knowledgeable chavruta partner — direct, warm, intellectually alive
@@ -471,6 +457,11 @@ On Kabbalah and gematria:
 - For gematria, use the retrieved TorahCalc data — state the standard value, name the most meaningful Torah word matches, and explain the deeper significance
 - If the user asks in English (e.g. "gematria of love"), first translate to Hebrew (אהבה) then calculate
 - Always ground gematria insights in actual Torah verses or kabbalistic teachings
+
+On Ramchal questions:
+- Draw primarily from Mesillat Yesharim, Derech Hashem, and Da'at Tevunot
+- The Ramchal (Rabbi Moshe Chaim Luzzatto) bridges mussar and Kabbalah — always highlight this unique synthesis
+- His systematic approach to Torah thought makes him especially valuable for philosophical questions
 
 On calendar questions:
 - Use the retrieved calendar data to give precise current answers
