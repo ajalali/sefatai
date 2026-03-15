@@ -106,7 +106,7 @@ export default function Home() {
     const form = new FormData()
     form.append('audio', blob, 'audio.webm')
     const res = await fetch('/api/transcribe', { method: 'POST', body: form })
-    if (!res.ok) throw new Error(`transcribe ${res.status}`)
+    if (!res.ok) throw new Error('transcribe failed')
     const data = await res.json()
     return data.transcript || ''
   }
@@ -165,7 +165,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userInput, history: historyRef.current }),
       })
-      if (!res.ok) throw new Error(`API ${res.status}`)
+      if (!res.ok) throw new Error('chain failed')
       const spokenText = decodeURIComponent(res.headers.get('X-Spoken-Text') || '')
       const rawSources = res.headers.get('X-Sources')
       if (rawSources) {
@@ -285,7 +285,7 @@ export default function Home() {
             )}
 
             {transcript && appState !== 'recording' && (
-              <p className="text-amber-200/40 text-sm text-center italic">"{transcript}"</p>
+              <p className="text-amber-200/40 text-sm text-center italic">&quot;{transcript}&quot;</p>
             )}
 
             {answer && (
@@ -308,19 +308,12 @@ export default function Home() {
                 <span className="text-stone-600 text-xs w-full text-center uppercase tracking-widest mb-1">sources</span>
                 {sources.map((s, i) => (
                   s.url ? (
-                    
-                      key={i}
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-400/60 hover:text-blue-300 text-xs tracking-wide underline underline-offset-2 transition-colors"
-                    >
+                    <a key={i} href={s.url} target="_blank" rel="noopener noreferrer"
+                      className="text-blue-400/60 hover:text-blue-300 text-xs tracking-wide underline underline-offset-2 transition-colors">
                       {s.label}
                     </a>
                   ) : (
-                    <span key={i} className="text-stone-600 text-xs tracking-wide">
-                      {s.label}
-                    </span>
+                    <span key={i} className="text-stone-600 text-xs tracking-wide">{s.label}</span>
                   )
                 ))}
               </div>
@@ -330,7 +323,6 @@ export default function Home() {
 
       </div>
 
-      {/* <DebugLog /> */}
       <audio ref={audioRef} className="hidden" />
     </main>
   )
