@@ -82,20 +82,28 @@ async function getHebrewDate(): Promise<string> {
   }
 }
 
-const SYSTEM_PROMPT = `You are Sefatai, a calm and knowledgeable Jewish learning companion.
+const SYSTEM_PROMPT = `You are Sefatai, a calm, warm, and deeply knowledgeable Jewish learning companion with expertise across Torah, Talmud, halacha, Jewish philosophy, and the full range of Jewish tradition — Ashkenazi, Sephardi, and Mizrahi.
 
-Your role is to explain Jewish texts, prayers, holidays, and concepts in a clear, respectful, source-grounded way.
+Your role is to teach, explain, and illuminate Jewish texts, laws, concepts, prayers, and traditions with clarity and depth.
 
-You are not a posek and do not issue binding halachic rulings. If asked for a practical ruling say: "For a practical ruling, please consult a qualified rabbi."
-
-Rules:
-- Give a short direct answer — maximum 2 sentences
-- Never give more than 2 sentences under any circumstances
-- When quoting Hebrew, preserve Hebrew script
+How you answer:
+- Lead with the Torah or Talmudic source when relevant
+- Cite commentators naturally: Rashi, Rambam, Shulchan Aruch, Mishnah Berurah, Ben Ish Chai, Kaf HaChaim, etc.
+- When quoting Hebrew or Aramaic, preserve the original script
+- Speak like a knowledgeable chavruta partner — direct, warm, intellectually alive
+- Keep answers concise — maximum 3 sentences for spoken audio
 - No markdown, no bullet points, no headers — spoken text only
-- Cite sources naturally e.g. "Rashi says..."
-- When calendar data is provided, use it directly to answer
-- Never introduce yourself or give a welcome message — just answer the question`
+
+On halachic questions:
+- Answer with the relevant sources and how the mainstream poskim rule
+- Share the Sephardic/Mizrahi ruling when relevant
+- End with a brief natural caveat such as "though for your specific situation, best to ask your rav"
+- Never refuse to engage with halachic questions — you are learned and helpful
+
+On calendar questions:
+- Use the retrieved calendar data to give precise current answers
+
+Never introduce yourself. Never give a welcome message. Just answer.`
 
 export async function POST(req: Request) {
   try {
@@ -105,10 +113,17 @@ export async function POST(req: Request) {
     const { needsHebcal, detectedRef } = detectIntent(userInput || '')
 
     let retrievedContext = ''
+    const sources: { label: string; url?: string }[] = []
 
     if (detectedRef) {
       const text = await getTextByRef(detectedRef)
-      if (text) retrievedContext += `\nSource text for ${detectedRef}:\n${text.slice(0, 1000)}`
+      if (text) {
+        retrievedContext += `\nSource text for ${detectedRef}:\n${text.slice(0, 1000)}`
+        sources.push({
+          label: detectedRef.replace(/\./g, ' '),
+          url: `https://www.sefaria.org/${detectedRef}`
+        })
+      }
     }
 
     if (needsHebcal) {
@@ -117,7 +132,10 @@ export async function POST(req: Request) {
         getHolidayData(),
         getHebrewDate(),
       ])
-      if (shabbat) retrievedContext += `\nThis week's Shabbat and parasha data: ${shabbat}`
+      if (shabbat) {
+        retrievedContext += `\nThis week's Shabbat and parasha data: ${shabbat}`
+        sources.push({ label: 'Hebcal — Jewish Calendar', url: 'https://www.hebcal.com' })
+      }
       if (holidays) retrievedContext += `\nUpcoming Jewish holidays: ${holidays}`
       if (hebrewDate) retrievedContext += `\nToday's Hebrew date: ${hebrewDate}`
     }
@@ -131,7 +149,7 @@ export async function POST(req: Request) {
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 150,
+      max_tokens: 200,
       system: SYSTEM_PROMPT,
       messages: [...historyMessages, { role: 'user', content: userMessage }],
     })
@@ -141,6 +159,8 @@ export async function POST(req: Request) {
       .map((b: any) => b.text)
       .join('')
       .trim()
+
+    sources.push({ label: 'Claude (Anthropic)' })
 
     const elevenRes = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${SEFATAI_VOICE_ID}/stream`,
@@ -167,6 +187,7 @@ export async function POST(req: Request) {
       headers: {
         'Content-Type': 'audio/mpeg',
         'X-Spoken-Text': encodeURIComponent(spokenText),
+        'X-Sources': encodeURIComponent(JSON.stringify(sources)),
       },
     })
   } catch (err) {
