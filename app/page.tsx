@@ -21,6 +21,7 @@ export default function Home() {
   const [transcript, setTranscript] = useState('')
   const [answer, setAnswer] = useState('')
   const [sources, setSources] = useState<Source[]>([])
+  const [morePressed, setMorePressed] = useState(false)
 
   const historyRef = useRef<{ role: string; content: string }[]>([])
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -29,7 +30,6 @@ export default function Home() {
   const audioChunksRef = useRef<Blob[]>([])
   const streamRef = useRef<MediaStream | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
-  const lastAnswerRef = useRef<string>('')
 
   const setStatus = (s: AppState, text: string) => {
     setAppState(s)
@@ -155,15 +155,22 @@ export default function Home() {
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       stopLoadingMessages()
+      setMorePressed(false)
       if (spokenText) {
+        const isRefusal = spokenText.includes('cannot help with that') || spokenText.includes('Please rephrase')
         setAnswer(spokenText)
-        lastAnswerRef.current = spokenText
-        addToHistory('assistant', spokenText)
+        if (isRefusal) {
+          setTranscript('')
+          historyRef.current = historyRef.current.slice(0, -1)
+        } else {
+          addToHistory('assistant', spokenText)
+        }
       }
       await playAudio(url)
     } catch (e) {
       console.error('speak error', e)
       stopLoadingMessages()
+      setMorePressed(false)
     }
     setStatus('idle', 'tap to ask')
   }, [])
@@ -213,13 +220,8 @@ export default function Home() {
   }
 
   const handleMore = () => {
-    const last = lastAnswerRef.current
-    if (!last) return
-    const wasRecitation = /[\u0590-\u05FF]/.test(last) && last.length > 200
-    const morePrompt = wasRecitation
-      ? 'Give one brief commentary insight on the text just recited — one sentence from Rashi, Radak, or another commentator. Maximum 2 sentences.'
-      : 'Add one more insight on what you just said — one related source or application. Maximum 2 sentences.'
-    speak(morePrompt)
+    setMorePressed(true)
+    speak('say more')
   }
 
   return (
@@ -251,20 +253,32 @@ export default function Home() {
           </>
         ) : (
           <>
-            <button
-              onClick={handleMicTap}
-              className={`w-36 h-36 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
-                appState === 'loading'
-                  ? 'border-amber-300 bg-amber-900/20 animate-pulse shadow-[0_0_60px_rgba(217,119,6,0.5)]'
-                  : appState === 'recording'
-                  ? 'border-red-400 bg-red-900/30 shadow-[0_0_60px_rgba(220,38,38,0.5)]'
-                  : appState === 'playing'
-                  ? 'border-blue-400 bg-blue-900/20 shadow-[0_0_60px_rgba(96,165,250,0.4)] animate-pulse'
-                  : 'border-amber-400 bg-amber-900/20 shadow-[0_0_40px_rgba(217,119,6,0.3)] hover:bg-amber-800/20'
-              }`}
-            >
-              <span className="text-4xl">🎙️</span>
-            </button>
+            <div className="relative flex items-center justify-center">
+              {appState === 'loading' && (
+                <>
+                  <div className="absolute rounded-full border border-amber-400/50 animate-ping"
+                    style={{ width: '160px', height: '160px', animationDuration: '1s' }} />
+                  <div className="absolute rounded-full border border-amber-300/30 animate-ping"
+                    style={{ width: '195px', height: '195px', animationDuration: '1s', animationDelay: '0.25s' }} />
+                  <div className="absolute rounded-full border border-amber-200/15 animate-ping"
+                    style={{ width: '230px', height: '230px', animationDuration: '1s', animationDelay: '0.5s' }} />
+                </>
+              )}
+              <button
+                onClick={handleMicTap}
+                className={`w-36 h-36 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
+                  appState === 'loading'
+                    ? 'border-amber-200 bg-amber-900/30 shadow-[0_0_80px_rgba(217,119,6,0.8)] scale-105'
+                    : appState === 'recording'
+                    ? 'border-red-400 bg-red-900/30 shadow-[0_0_60px_rgba(220,38,38,0.5)]'
+                    : appState === 'playing'
+                    ? 'border-blue-400 bg-blue-900/20 shadow-[0_0_60px_rgba(96,165,250,0.4)] animate-pulse'
+                    : 'border-amber-400 bg-amber-900/20 shadow-[0_0_40px_rgba(217,119,6,0.3)] hover:bg-amber-800/20'
+                }`}
+              >
+                <span className="text-4xl">🎙️</span>
+              </button>
+            </div>
 
             {statusText && (
               <p className="text-amber-400/60 text-xs tracking-widest uppercase animate-pulse">
@@ -282,12 +296,17 @@ export default function Home() {
               </div>
             )}
 
-            {answer && appState === 'idle' && lastAnswerRef.current && (
+            {answer && appState === 'idle' && (
               <button
                 onClick={handleMore}
-                className="text-amber-400/50 hover:text-amber-300 text-xs uppercase tracking-widest transition-colors border border-amber-900/40 rounded-full px-4 py-1"
+                disabled={morePressed}
+                className={`text-xs uppercase tracking-widest transition-all duration-300 border rounded-full px-4 py-1 ${
+                  morePressed
+                    ? 'border-amber-400/60 text-amber-300 bg-amber-900/30 scale-95 opacity-70'
+                    : 'border-amber-900/40 text-amber-400/50 hover:text-amber-300 hover:border-amber-400/40'
+                }`}
               >
-                + more
+                {morePressed ? '...' : '+ more'}
               </button>
             )}
 
