@@ -230,6 +230,10 @@ export default function Home() {
     setStatus('idle', 'tap to ask')
   }
 
+  const handleMore = () => {
+    speak('Give me more — either recite more of the same text, or go deeper on the same concept.')
+  }
+
   return (
     <main className="relative min-h-screen bg-stone-950 flex flex-col items-center justify-center overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-b from-stone-950 via-amber-950/20 to-stone-950" />
@@ -288,6 +292,15 @@ export default function Home() {
               <div className="bg-stone-900/60 border border-amber-900/40 rounded-2xl p-5 text-amber-100/80 text-sm leading-relaxed text-center max-h-64 overflow-y-auto">
                 {answer}
               </div>
+            )}
+
+            {answer && appState === 'idle' && (
+              <button
+                onClick={handleMore}
+                className="text-amber-400/50 hover:text-amber-300 text-xs uppercase tracking-widest transition-colors border border-amber-900/40 rounded-full px-4 py-1"
+              >
+                + more
+              </button>
             )}
 
             {sources.length > 0 && (
