@@ -1,12 +1,9 @@
-// Sefatai — voice configuration
-// Voice: Will (bIHbv24MWmeRgasZH58o) — pending voice clone
-
 export const SEFATAI_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'bIHbv24MWmeRgasZH58o'
 
 export const VOICE_SETTINGS = {
-  stability: 0.75,        // higher = consistent tone, fewer breath artifacts
-  similarity_boost: 0.75, // lower = less exaggerated characteristics, cleaner S sounds
-  style: 0.15,            // low = minimal stylistic flourish, no lispy S, natural delivery
+  stability: 0.90,        // very high = rock solid, zero breath variation
+  similarity_boost: 0.60, // lower = pulls less hard on voice characteristics, reduces lisp
+  style: 0.00,            // zero = no stylistic exaggeration whatsoever
   use_speaker_boost: true,
 }
 
