@@ -22,6 +22,88 @@ async function validateSefariaRef(ref: string, fallbackSlug: string): Promise<st
   return `https://www.sefaria.org/${fallbackSlug}`
 }
 
+// ─── Source list — built once at module level ─────────────────
+
+const TANAKH = [
+  'Genesis','Bereshit','Bereishit','Exodus','Shemot','Leviticus','Vayikra',
+  'Numbers','Bamidbar','Deuteronomy','Devarim','Joshua','Yehoshua',
+  'Judges','Shoftim','Samuel','Shmuel','Kings','Melachim',
+  'Isaiah','Yeshayahu','Jeremiah','Yirmiyahu','Ezekiel','Yechezkel',
+  'Hosea','Hoshea','Joel','Yoel','Amos','Obadiah','Ovadiah',
+  'Jonah','Yonah','Micah','Michah','Nahum','Nachum',
+  'Habakkuk','Chavakuk','Zephaniah','Tzefaniah','Haggai','Chaggai',
+  'Zechariah','Zecharyah','Malachi',
+  'Psalms','Tehillim','Proverbs','Mishlei','Job','Iyov',
+  'Song of Songs','Shir HaShirim','Ruth','Lamentations','Eicha',
+  'Ecclesiastes','Kohelet','Esther','Daniel','Ezra',
+  'Nehemiah','Nechemiah','Chronicles','Divrei HaYamim',
+]
+const TALMUD = [
+  'Berakhot','Berachot','Brachot','Shabbat','Eruvin','Pesachim',
+  'Shekalim','Yoma','Sukkah','Beitzah','Rosh Hashanah',
+  'Taanit','Taanith','Megillah','Moed Katan','Chagigah','Hagigah',
+  'Yevamot','Ketubot','Nedarim','Nazir','Sotah','Gittin',
+  'Kiddushin','Bava Kamma','Bava Metzia','Bava Batra',
+  'Sanhedrin','Makkot','Shevuot','Avodah Zarah','Horayot',
+  'Zevachim','Menachot','Chullin','Bekhorot','Arakhin',
+  'Temurah','Keritot','Meilah','Niddah',
+]
+const MISHNAH = ['Pirkei Avot','Avot','Mishnah','Mishna']
+const RAMBAM = ['Rambam','Maimonides','Mishneh Torah','Hilchot','Hilkhot']
+const SHULCHAN_ARUCH = [
+  'Shulchan Aruch','Orach Chaim','Yoreh Deah',
+  'Even HaEzer','Choshen Mishpat',
+  'Mishnah Berurah','Mishneh Berurah','Kitzur Shulchan Aruch',
+]
+const COMMENTATORS = [
+  'Rashi','Ramban','Ibn Ezra','Sforno','Radak',
+  'Nachmanides','Abarbanel','Alshich','Ohr HaChaim',
+]
+const KABBALAH = [
+  'Zohar','Tikunei Zohar','Zohar Chadash',
+  'Sefer Yetzirah','Sefer HaBahir',
+  'Etz Chaim',"Sha'ar HaGilgulim",
+  'Tanya','Likutei Amarim','Likutey Amarim',
+  'Likutei Torah','Torah Or',
+  'Pardes Rimonim','Pri Etz Chaim','Mevo Shearim',
+]
+const GEMATRIA_BOOKS = ['Sefer Gematriot','Notarikon']
+const MUSSAR = [
+  'Chovot HaLevavot','Duties of the Heart',
+  'Mesillat Yesharim','Path of the Just',
+  'Orchot Tzaddikim','Shaarei Teshuva',
+  'Sefer HaChinuch','Kuzari',
+  'Moreh Nevuchim','Guide for the Perplexed',
+  'Nefesh HaChaim','Maharal','Sfat Emet',
+  'Shem MiShmuel','Ben Ish Chai','Ben Ish Hai',
+  'Ben Yehoyada','Kaf HaChaim',
+]
+const MIDRASH = [
+  'Midrash Rabbah','Bereishit Rabbah','Shemot Rabbah',
+  'Vayikra Rabbah','Bamidbar Rabbah','Devarim Rabbah',
+  'Midrash Tanchuma','Tanchuma',
+  'Pesikta Rabbati','Pesikta DeRav Kahana',
+  'Yalkut Shimoni','Midrash Tehillim',
+]
+
+const ALL_SOURCES = [
+  ...TANAKH, ...TALMUD, ...MISHNAH, ...RAMBAM,
+  ...SHULCHAN_ARUCH, ...COMMENTATORS, ...KABBALAH,
+  ...GEMATRIA_BOOKS, ...MUSSAR, ...MIDRASH,
+]
+
+const SOURCE_PATTERN = ALL_SOURCES
+  .map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  .sort((a, b) => b.length - a.length)
+  .join('|')
+
+const REF_REGEX = new RegExp(
+  `(?:(?:Rashi|Ramban|Ibn Ezra|Sforno|Radak|Nachmanides|Ohr HaChaim|Alshich) on )?` +
+  `(${SOURCE_PATTERN})` +
+  `(?:\\s+\\d+[ab]?(?::\\d+)?)?`,
+  'i'
+)
+
 // ─── Intent detection ─────────────────────────────────────────
 
 function detectIntent(text: string): {
@@ -54,99 +136,15 @@ function detectIntent(text: string): {
   const isGematria = gematriaKeywords.some(k => lower.includes(k))
   const gematriaQuery = isGematria ? text : null
 
-  const tanakh = [
-    'Genesis','Bereshit','Bereishit','Exodus','Shemot','Leviticus','Vayikra',
-    'Numbers','Bamidbar','Deuteronomy','Devarim','Joshua','Yehoshua',
-    'Judges','Shoftim','Samuel','Shmuel','Kings','Melachim',
-    'Isaiah','Yeshayahu','Jeremiah','Yirmiyahu','Ezekiel','Yechezkel',
-    'Hosea','Hoshea','Joel','Yoel','Amos','Obadiah','Ovadiah',
-    'Jonah','Yonah','Micah','Michah','Nahum','Nachum',
-    'Habakkuk','Chavakuk','Zephaniah','Tzefaniah','Haggai','Chaggai',
-    'Zechariah','Zecharyah','Malachi',
-    'Psalms','Tehillim','Proverbs','Mishlei','Job','Iyov',
-    'Song of Songs','Shir HaShirim','Ruth','Lamentations','Eicha',
-    'Ecclesiastes','Kohelet','Esther','Daniel','Ezra',
-    'Nehemiah','Nechemiah','Chronicles','Divrei HaYamim',
-  ]
-  const talmud = [
-    'Berakhot','Berachot','Brachot','Shabbat','Eruvin','Pesachim',
-    'Shekalim','Yoma','Sukkah','Beitzah','Rosh Hashanah',
-    'Taanit','Taanith','Megillah','Moed Katan','Chagigah','Hagigah',
-    'Yevamot','Ketubot','Nedarim','Nazir','Sotah','Gittin',
-    'Kiddushin','Bava Kamma','Bava Metzia','Bava Batra',
-    'Sanhedrin','Makkot','Shevuot','Avodah Zarah','Horayot',
-    'Zevachim','Menachot','Chullin','Bekhorot','Arakhin',
-    'Temurah','Keritot','Meilah','Niddah',
-  ]
-  const mishnah = ['Pirkei Avot','Avot','Mishnah','Mishna']
-  const rambam = ['Rambam','Maimonides','Mishneh Torah','Hilchot','Hilkhot']
-  const shulchanAruch = [
-    'Shulchan Aruch','Orach Chaim','Yoreh Deah',
-    'Even HaEzer','Choshen Mishpat',
-    'Mishnah Berurah','Mishneh Berurah','Kitzur Shulchan Aruch',
-  ]
-  const commentators = [
-    'Rashi','Ramban','Ibn Ezra','Sforno','Radak',
-    'Nachmanides','Abarbanel','Alshich','Ohr HaChaim',
-  ]
-  const kabbalah = [
-    'Zohar','Tikunei Zohar','Zohar Chadash',
-    'Sefer Yetzirah','Sefer HaBahir',
-    'Etz Chaim',"Sha'ar HaGilgulim",
-    'Tanya','Likutei Amarim','Likutey Amarim',
-    'Likutei Torah','Torah Or',
-    'Pardes Rimonim','Pri Etz Chaim','Mevo Shearim',
-  ]
-  const gematriaBooks = ['Sefer Gematriot','Notarikon']
-  const mussar = [
-    'Chovot HaLevavot','Duties of the Heart',
-    'Mesillat Yesharim','Path of the Just',
-    'Orchot Tzaddikim','Shaarei Teshuva',
-    'Sefer HaChinuch','Kuzari',
-    'Moreh Nevuchim','Guide for the Perplexed',
-    'Nefesh HaChaim','Maharal','Sfat Emet',
-    'Shem MiShmuel','Ben Ish Chai','Ben Ish Hai',
-    'Ben Yehoyada','Kaf HaChaim',
-  ]
-  const midrash = [
-    'Midrash Rabbah','Bereishit Rabbah','Shemot Rabbah',
-    'Vayikra Rabbah','Bamidbar Rabbah','Devarim Rabbah',
-    'Midrash Tanchuma','Tanchuma',
-    'Pesikta Rabbati','Pesikta DeRav Kahana',
-    'Yalkut Shimoni','Midrash Tehillim',
-  ]
-
-  const allSources = [
-    ...tanakh, ...talmud, ...mishnah, ...rambam,
-    ...shulchanAruch, ...commentators, ...kabbalah,
-    ...gematriaBooks, ...mussar, ...midrash,
-  ]
-
-  const sourcePattern = allSources
-    .map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    .sort((a, b) => b.length - a.length)
-    .join('|')
-
-  const refRegex = new RegExp(
-    `(?:(?:Rashi|Ramban|Ibn Ezra|Sforno|Radak|Nachmanides|Ohr HaChaim|Alshich) on )?` +
-    `(${sourcePattern})` +
-    `(?:\\s+\\d+[ab]?(?::\\d+)?)?`,
-    'i'
-  )
-
-  const refMatch = text.match(refRegex)
-  let detectedRef: string | null = null
-  if (refMatch) detectedRef = refMatch[0].trim()
+  const refMatch = text.match(REF_REGEX)
+  const detectedRef = refMatch ? refMatch[0].trim() : null
 
   return { needsHebcal, detectedRef, isRecitation, isMore, isGematria, gematriaQuery }
 }
 
 // ─── TorahCalc Gematria ───────────────────────────────────────
 
-type GematriaResult = {
-  calculation: any
-  matches: any
-}
+type GematriaResult = { calculation: any; matches: any }
 
 async function getGematria(text: string): Promise<GematriaResult> {
   try {
@@ -165,36 +163,26 @@ async function getGematria(text: string): Promise<GematriaResult> {
 function formatGematriaContext(result: GematriaResult): string {
   if (!result.calculation && !result.matches) return ''
   let context = ''
-
   if (result.calculation?.result) {
     const methods = result.calculation.result
-    const keyMethods = [
-      'Mispar Hechrachi', 'Mispar Gadol', 'Mispar Siduri',
-      'Mispar Katan', 'Atbash', 'Mispar Kolel'
-    ]
+    const keyMethods = ['Mispar Hechrachi','Mispar Gadol','Mispar Siduri','Mispar Katan','Atbash','Mispar Kolel']
     context += '\nGematria values:\n'
     for (const method of keyMethods) {
       const entry = methods[method]
       if (entry) context += `${method}: ${entry.value}\n`
     }
   }
-
   if (result.matches?.result) {
     const r = result.matches.result
     context += '\nTorah words with same gematria:\n'
     if (r.wordsInTorah?.length) {
-      context += r.wordsInTorah.slice(0, 8).map((w: any) =>
-        `${w.word} (${w.ref || ''})`
-      ).join(', ') + '\n'
+      context += r.wordsInTorah.slice(0, 8).map((w: any) => `${w.word} (${w.ref || ''})`).join(', ') + '\n'
     }
     if (r.versesInTorah?.length) {
       context += '\nTorah verses with same gematria:\n'
-      context += r.versesInTorah.slice(0, 3).map((v: any) =>
-        `${v.ref}: ${v.text?.slice(0, 80) || ''}`
-      ).join('\n') + '\n'
+      context += r.versesInTorah.slice(0, 3).map((v: any) => `${v.ref}: ${v.text?.slice(0, 80) || ''}`).join('\n') + '\n'
     }
   }
-
   return context
 }
 
@@ -248,14 +236,16 @@ async function extractSourcesFromText(text: string): Promise<{ label: string; ur
   const seen = new Set<string>()
 
   const specificRefs = text.match(SPECIFIC_REF_PATTERN) || []
-  for (const ref of specificRefs) {
-    if (seen.has(ref)) continue
+
+  // Validate all specific refs in parallel
+  await Promise.all(specificRefs.map(async (ref) => {
+    if (seen.has(ref)) return
     seen.add(ref)
     const source = KNOWN_SOURCES.find(s => s.pattern.test(ref.split(/\s+/)[0]))
     const fallback = source?.sefariaSlug || 'texts'
     const url = await validateSefariaRef(ref, fallback)
     found.push({ label: ref, url })
-  }
+  }))
 
   for (const source of KNOWN_SOURCES) {
     if (!source.sefariaSlug) continue
@@ -326,7 +316,7 @@ async function searchSefaria(query: string, limit = 3): Promise<{ ref: string; t
   }
 }
 
-// ─── Sefaria related texts ────────────────────────────────────
+// ─── Sefaria related texts — parallelized ────────────────────
 
 async function getRelatedTexts(ref: string, limit = 3): Promise<{ ref: string; text: string; url: string }[]> {
   try {
@@ -335,18 +325,16 @@ async function getRelatedTexts(ref: string, limit = 3): Promise<{ ref: string; t
     if (!res.ok) return []
     const data = await res.json()
     const links = (data?.links || []).filter((l: any) => l.category !== 'Commentary').slice(0, limit)
-    const results: { ref: string; text: string; url: string }[] = []
-    for (const link of links) {
-      const linkRef = link.ref || link.anchorRef
-      if (!linkRef) continue
-      const text = await getTextByRef(linkRef)
-      if (text) results.push({
+    const linkRefs = links.map((l: any) => l.ref || l.anchorRef).filter(Boolean)
+
+    const texts = await Promise.all(linkRefs.map((linkRef: string) => getTextByRef(linkRef)))
+    return linkRefs
+      .map((linkRef: string, i: number) => ({
         ref: linkRef,
-        text: text.slice(0, 300),
-        url: `https://www.sefaria.org/${toSefariaUrl(linkRef)}`
-      })
-    }
-    return results
+        text: texts[i].slice(0, 300),
+        url: `https://www.sefaria.org/${toSefariaUrl(linkRef)}`,
+      }))
+      .filter(r => r.text)
   } catch {
     return []
   }
@@ -396,35 +384,40 @@ function sanitizeForSpeech(text: string): string {
     .replace(/ה׳/g, 'Hashem')
     .replace(/ד׳/g, 'Hashem')
 
-  // Hebrew letter names — so TTS says "Alef" not "ah"
+  // Hebrew letter names — Unicode-aware boundary matching
+  // \b doesn't work with Hebrew so we use lookarounds
+  const HB = '\\u05D0-\\u05EA\\u05F0-\\u05F4\\uFB1D-\\uFB4F' // Hebrew block
+  const notHB = `[^${HB}]`
+  const b = (char: string) => new RegExp(`(?<=${notHB}|^)${char}(?=${notHB}|$)`, 'g')
+
   const letterNames: [RegExp, string][] = [
-    [/\bא\b/g, 'Alef'],
-    [/\bב\b/g, 'Bet'],
-    [/\bג\b/g, 'Gimel'],
-    [/\bד\b/g, 'Dalet'],
-    [/\bה\b/g, 'Hey'],
-    [/\bו\b/g, 'Vav'],
-    [/\bז\b/g, 'Zayin'],
-    [/\bח\b/g, 'Chet'],
-    [/\bט\b/g, 'Tet'],
-    [/\bי\b/g, 'Yod'],
-    [/\bכ\b/g, 'Kaf'],
-    [/\bך\b/g, 'Kaf Sofit'],
-    [/\bל\b/g, 'Lamed'],
-    [/\bמ\b/g, 'Mem'],
-    [/\bם\b/g, 'Mem Sofit'],
-    [/\bנ\b/g, 'Nun'],
-    [/\bן\b/g, 'Nun Sofit'],
-    [/\bס\b/g, 'Samech'],
-    [/\bע\b/g, 'Ayin'],
-    [/\bפ\b/g, 'Peh'],
-    [/\bף\b/g, 'Peh Sofit'],
-    [/\bצ\b/g, 'Tzadi'],
-    [/\bץ\b/g, 'Tzadi Sofit'],
-    [/\bק\b/g, 'Kuf'],
-    [/\bר\b/g, 'Resh'],
-    [/\bש\b/g, 'Shin'],
-    [/\bת\b/g, 'Tav'],
+    [b('א'), 'Alef'],
+    [b('ב'), 'Bet'],
+    [b('ג'), 'Gimel'],
+    [b('ד'), 'Dalet'],
+    [b('ה'), 'Hey'],
+    [b('ו'), 'Vav'],
+    [b('ז'), 'Zayin'],
+    [b('ח'), 'Chet'],
+    [b('ט'), 'Tet'],
+    [b('י'), 'Yod'],
+    [b('כ'), 'Kaf'],
+    [b('ך'), 'Kaf Sofit'],
+    [b('ל'), 'Lamed'],
+    [b('מ'), 'Mem'],
+    [b('ם'), 'Mem Sofit'],
+    [b('נ'), 'Nun'],
+    [b('ן'), 'Nun Sofit'],
+    [b('ס'), 'Samech'],
+    [b('ע'), 'Ayin'],
+    [b('פ'), 'Peh'],
+    [b('ף'), 'Peh Sofit'],
+    [b('צ'), 'Tzadi'],
+    [b('ץ'), 'Tzadi Sofit'],
+    [b('ק'), 'Kuf'],
+    [b('ר'), 'Resh'],
+    [b('ש'), 'Shin'],
+    [b('ת'), 'Tav'],
   ]
 
   for (const [pattern, name] of letterNames) {
@@ -636,7 +629,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // spokenText → card (shows יהוה), sanitized → TTS (says Hashem)
     const audio = await textToSpeech(sanitizeForSpeech(spokenText))
 
     return new Response(audio, {
