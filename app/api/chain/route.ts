@@ -1,8 +1,3 @@
-👉 **https://github.com/ajalali/sefatai/edit/main/app/api/chain/route.ts**
-
-Select all and replace with:
-
-```ts
 export const runtime = 'nodejs'
 
 import Anthropic from '@anthropic-ai/sdk'
@@ -575,6 +570,3 @@ export async function POST(req: Request) {
     })
   }
 }
-```
-
-Commit and tell me when green — and what are the other guardrails?
