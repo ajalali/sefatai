@@ -7,7 +7,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 // ─── Intent detection ─────────────────────────────────────────
 
-function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string | null } {
+function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string | null; isRecitation: boolean } {
   const lower = text.toLowerCase()
   const calendarKeywords = [
     'parsha', 'parasha', 'shabbat', 'shabbos', 'candle', 'havdalah',
@@ -19,7 +19,8 @@ function detectIntent(text: string): { needsHebcal: boolean; detectedRef: string
   const needsHebcal = calendarKeywords.some(k => lower.includes(k))
   const refMatch = text.match(/(?:Rashi on |Ramban on |Maimonides on )?(?:Genesis|Exodus|Leviticus|Numbers|Deuteronomy|Bereshit|Shemot|Vayikra|Bamidbar|Devarim|Berakhot|Shabbat|Psalms|Proverbs|Isaiah|Jeremiah)\s+\d+(?::\d+)?/i)
   const detectedRef = refMatch ? refMatch[0].replace(/\s+/g, '.').replace(':', '.') : null
-  return { needsHebcal, detectedRef }
+  const isRecitation = /(recite|read out|read me|say|give me the verse|give me the text|give me the pasuk|full|whole|entire|complete|all of|psalm|tehillim|perek|chapter|parasha|portion|pasuk|possuk|verse|text of|words of)/i.test(lower)
+  return { needsHebcal, detectedRef, isRecitation }
 }
 
 // ─── Sefaria ──────────────────────────────────────────────────
@@ -30,10 +31,28 @@ async function getTextByRef(ref: string): Promise<string> {
     const res = await fetch(`https://www.sefaria.org/api/v3/texts/${encoded}`)
     if (!res.ok) return ''
     const data = await res.json()
-    const en = data?.versions?.find((v: any) => v.language === 'en')
-    if (!en) return ''
-    const text = Array.isArray(en.text) ? en.text.flat().join(' ') : en.text
-    return text || ''
+
+    // Prefer voweled Hebrew for recitation accuracy
+    const heVersion = data?.versions?.find((v: any) => v.language === 'he')
+    const enVersion = data?.versions?.find((v: any) => v.language === 'en')
+
+    let heText = ''
+    let enText = ''
+
+    if (heVersion) {
+      const raw = Array.isArray(heVersion.text) ? heVersion.text.flat() : [heVersion.text]
+      heText = raw.filter(Boolean).join('\n')
+    }
+
+    if (enVersion) {
+      const raw = Array.isArray(enVersion.text) ? enVersion.text.flat() : [enVersion.text]
+      enText = raw.filter(Boolean).join('\n')
+    }
+
+    if (heText && enText) return `Hebrew:\n${heText}\n\nEnglish:\n${enText}`
+    if (heText) return heText
+    if (enText) return enText
+    return ''
   } catch {
     return ''
   }
@@ -165,8 +184,10 @@ How you answer:
 - Cite commentators naturally: Rashi, Rambam, Shulchan Aruch, Mishnah Berurah, Ben Ish Chai, Kaf HaChaim, etc.
 - When quoting Hebrew or Aramaic, ALWAYS include full nikud (vowel marks) so text-to-speech pronounces correctly — e.g. צַלְמָוֶת not צלמות, שְׁמַע not שמע
 - Speak like a knowledgeable chavruta partner — direct, warm, intellectually alive
-- Keep answers concise — maximum 3 sentences for spoken audio
+- For regular questions: maximum 3 sentences
+- For recitation requests (recite, read, say, full psalm, full chapter, give me the verse): recite the COMPLETE text in full with full nikud on every word — do not cut off or summarize
 - No markdown, no bullet points, no headers — spoken text only
+- When reciting multiple verses, put each verse on its own line
 
 On halachic questions:
 - Answer with the relevant sources and how the mainstream poskim rule
@@ -186,7 +207,7 @@ export async function POST(req: Request) {
     const body = await req.json()
     const { userInput, history, locationId } = body
 
-    const { needsHebcal, detectedRef } = detectIntent(userInput || '')
+    const { needsHebcal, detectedRef, isRecitation } = detectIntent(userInput || '')
 
     let retrievedContext = ''
     const sources: { label: string; url?: string }[] = []
@@ -194,7 +215,7 @@ export async function POST(req: Request) {
     if (detectedRef) {
       const text = await getTextByRef(detectedRef)
       if (text) {
-        retrievedContext += `\nSource text for ${detectedRef}:\n${text.slice(0, 1000)}`
+        retrievedContext += `\nSource text for ${detectedRef}:\n${text.slice(0, isRecitation ? 5000 : 1000)}`
         sources.push({
           label: detectedRef.replace(/\./g, ' '),
           url: `https://www.sefaria.org/${detectedRef}`
@@ -226,7 +247,7 @@ export async function POST(req: Request) {
     // ─── Claude ───────────────────────────────────────────────
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 200,
+      max_tokens: isRecitation ? 1500 : 200,
       system: SYSTEM_PROMPT,
       messages: [...historyMessages, { role: 'user', content: userMessage }],
     })
@@ -242,7 +263,6 @@ export async function POST(req: Request) {
     // ─── Chunk + parallel TTS ─────────────────────────────────
     const chunks = chunkByLanguage(spokenText)
 
-    // Skip chunking if no Hebrew present — single call is faster
     let stitched: Buffer
     if (chunks.length === 1 && chunks[0].lang === 'en') {
       const res = await fetch(
@@ -264,7 +284,6 @@ export async function POST(req: Request) {
       if (!res.ok) throw new Error(`ElevenLabs error: ${res.status}`)
       stitched = Buffer.from(await res.arrayBuffer())
     } else {
-      // Fire all chunks in parallel, stitch in order
       const audioBuffers = await Promise.all(
         chunks.map(chunk => ttsChunk(chunk.text, chunk.lang))
       )
