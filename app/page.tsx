@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import Image from 'next/image'
 
 const MAX_HISTORY = 6
@@ -13,25 +13,25 @@ const LOADING_MESSAGES = [
 
 type AppState = 'idle' | 'loading' | 'playing' | 'recording'
 
-// ─── Debug ────────────────────────────────────────────────────
-const debugLines: string[] = []
-function addDebug(msg: string) {
-  const t = new Date().toLocaleTimeString()
-  debugLines.unshift(`${t} ${msg}`)
-  if (debugLines.length > 30) debugLines.pop()
-}
-function DebugLog() {
-  const [lines, setLines] = useState<string[]>([])
-  useEffect(() => {
-    const interval = setInterval(() => setLines([...debugLines]), 300)
-    return () => clearInterval(interval)
-  }, [])
-  return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-black/95 text-green-400 text-xs font-mono p-2 max-h-40 overflow-y-auto border-t border-green-900">
-      {lines.map((l, i) => <div key={i}>{l}</div>)}
-    </div>
-  )
-}
+// ─── Debug (commented out — uncomment to re-enable) ───────────
+// const debugLines: string[] = []
+// function addDebug(msg: string) {
+//   const t = new Date().toLocaleTimeString()
+//   debugLines.unshift(`${t} ${msg}`)
+//   if (debugLines.length > 30) debugLines.pop()
+// }
+// function DebugLog() {
+//   const [lines, setLines] = useState<string[]>([])
+//   useEffect(() => {
+//     const interval = setInterval(() => setLines([...debugLines]), 300)
+//     return () => clearInterval(interval)
+//   }, [])
+//   return (
+//     <div className="fixed bottom-0 left-0 right-0 z-50 bg-black/95 text-green-400 text-xs font-mono p-2 max-h-40 overflow-y-auto border-t border-green-900">
+//       {lines.map((l, i) => <div key={i}>{l}</div>)}
+//     </div>
+//   )
+// }
 
 export default function Home() {
   const [appState, setAppState] = useState<AppState>('idle')
@@ -59,7 +59,7 @@ export default function Home() {
       streamRef.current = stream
       return stream
     } catch {
-      addDebug('mic denied')
+      // addDebug('mic denied')
       setStatus('idle', 'mic access needed')
       return null
     }
@@ -77,7 +77,7 @@ export default function Home() {
     if (!stream) return false
     audioChunksRef.current = []
     const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
-    addDebug(`recording mimeType=${mimeType}`)
+    // addDebug(`recording mimeType=${mimeType}`)
     const recorder = new MediaRecorder(stream, { mimeType })
     mediaRecorderRef.current = recorder
     recorder.ondataavailable = (e) => {
@@ -85,7 +85,7 @@ export default function Home() {
     }
     recorder.start(100)
     setStatus('recording', 'tap to stop')
-    addDebug('recording started')
+    // addDebug('recording started')
     return true
   }
 
@@ -96,7 +96,7 @@ export default function Home() {
       recorder.onstop = () => {
         const mimeType = recorder.mimeType || 'audio/webm'
         const blob = new Blob(audioChunksRef.current, { type: mimeType })
-        addDebug(`recording stopped, blob size=${blob.size}`)
+        // addDebug(`recording stopped, blob size=${blob.size}`)
         stopStream()
         resolve(blob)
       }
@@ -105,13 +105,13 @@ export default function Home() {
   }
 
   const transcribeAudio = async (blob: Blob): Promise<string> => {
-    addDebug(`transcribing blob size=${blob.size}`)
+    // addDebug(`transcribing blob size=${blob.size}`)
     const form = new FormData()
     form.append('audio', blob, 'audio.webm')
     const res = await fetch('/api/transcribe', { method: 'POST', body: form })
     if (!res.ok) throw new Error(`transcribe ${res.status}`)
     const data = await res.json()
-    addDebug(`transcript: "${data.transcript}"`)
+    // addDebug(`transcript: "${data.transcript}"`)
     return data.transcript || ''
   }
 
@@ -128,9 +128,9 @@ export default function Home() {
       stopAudio()
       setStatus('playing', 'tap to stop')
       a.src = url
-      a.onended = () => { addDebug('audio ended'); setAppState('idle'); resolve() }
-      a.onerror = () => { addDebug('audio error'); setAppState('idle'); resolve() }
-      a.play().catch((e) => { addDebug(`play error: ${e}`); resolve() })
+      a.onended = () => { /*addDebug('audio ended');*/ setAppState('idle'); resolve() }
+      a.onerror = () => { /*addDebug('audio error');*/ setAppState('idle'); resolve() }
+      a.play().catch((e) => { /*addDebug(`play error: ${e}`);*/ console.error('play error', e); resolve() })
     })
   }
 
@@ -159,7 +159,7 @@ export default function Home() {
   }
 
   const speak = useCallback(async (userInput: string) => {
-    addDebug(`speak "${userInput.slice(0, 30)}"`)
+    // addDebug(`speak "${userInput.slice(0, 30)}"`)
     stopAudio()
     startLoadingMessages()
     addToHistory('user', userInput)
@@ -181,14 +181,15 @@ export default function Home() {
       }
       await playAudio(url)
     } catch (e) {
-      addDebug(`speak error: ${e}`)
+      // addDebug(`speak error: ${e}`)
+      console.error('speak error', e)
       stopLoadingMessages()
     }
     setStatus('idle', 'tap to ask')
   }, [])
 
   const handleMicTap = async () => {
-    addDebug(`handleMicTap state=${appState}`)
+    // addDebug(`handleMicTap state=${appState}`)
 
     if (appState === 'loading') return
 
@@ -199,10 +200,10 @@ export default function Home() {
     }
 
     if (appState === 'recording') {
-      addDebug('stopping recording...')
+      // addDebug('stopping recording...')
       const blob = await stopRecording()
       if (blob.size < 1000) {
-        addDebug('blob too small, ignoring')
+        // addDebug('blob too small, ignoring')
         setStatus('idle', 'tap to ask')
         return
       }
@@ -211,12 +212,13 @@ export default function Home() {
       try {
         text = await transcribeAudio(blob)
       } catch (e) {
-        addDebug(`transcribe error: ${e}`)
+        // addDebug(`transcribe error: ${e}`)
+        console.error('transcribe error', e)
         setStatus('idle', 'tap to ask')
         return
       }
       if (!text.trim()) {
-        addDebug('empty transcript')
+        // addDebug('empty transcript')
         setStatus('idle', 'tap to ask')
         return
       }
@@ -228,12 +230,12 @@ export default function Home() {
     // idle → start recording, clear previous
     setTranscript('')
     setAnswer('')
-    addDebug('starting recording...')
+    // addDebug('starting recording...')
     await startRecording()
   }
 
   const handleStart = () => {
-    addDebug('handleStart')
+    // addDebug('handleStart')
     setStarted(true)
     setStatus('idle', 'tap to ask')
   }
@@ -244,7 +246,6 @@ export default function Home() {
 
       <div className="relative z-10 flex flex-col items-center gap-6 px-6 max-w-md w-full">
 
-        {/* Hebrew title — always visible */}
         <div className="text-center">
           <h1 className="text-3xl font-serif text-amber-200 tracking-widest">סֵפָתַי</h1>
           <p className="text-amber-400/50 text-xs tracking-widest uppercase mt-1">Voice Learning Companion</p>
@@ -253,7 +254,6 @@ export default function Home() {
         {!started ? (
           <>
             <p className="text-amber-400/60 text-xs tracking-widest uppercase animate-pulse">tap to begin</p>
-            {/* Logo fills the button before tap */}
             <button
               onClick={handleStart}
               className="w-36 h-36 rounded-full border-2 border-amber-400 overflow-hidden hover:opacity-90 transition-all duration-500 shadow-[0_0_60px_rgba(217,119,6,0.4)]"
@@ -269,7 +269,6 @@ export default function Home() {
           </>
         ) : (
           <>
-            {/* Plain mic button after tap */}
             <button
               onClick={handleMicTap}
               className={`w-36 h-36 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
@@ -305,7 +304,7 @@ export default function Home() {
 
       </div>
 
-      <DebugLog />
+      {/* <DebugLog /> */}
       <audio ref={audioRef} className="hidden" />
     </main>
   )
