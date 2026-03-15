@@ -161,7 +161,7 @@ async function ttsChunk(text: string, lang: 'he' | 'en'): Promise<ArrayBuffer> {
 
 // ─── Stitch audio buffers ─────────────────────────────────────
 
-function stitchAudio(buffers: ArrayBuffer[]): Uint8Array {
+function stitchAudio(buffers: ArrayBuffer[]): ArrayBuffer {
   const total = buffers.reduce((sum, b) => sum + b.byteLength, 0)
   const result = new Uint8Array(total)
   let offset = 0
@@ -169,7 +169,7 @@ function stitchAudio(buffers: ArrayBuffer[]): Uint8Array {
     result.set(new Uint8Array(buf), offset)
     offset += buf.byteLength
   }
-  return result
+  return result.buffer
 }
 
 // ─── System prompt ────────────────────────────────────────────
@@ -262,7 +262,7 @@ export async function POST(req: Request) {
     // ─── Chunk + parallel TTS ─────────────────────────────────
     const chunks = chunkByLanguage(spokenText)
 
-    let stitched: Uint8Array
+    let stitched: ArrayBuffer
     if (chunks.length === 1 && chunks[0].lang === 'en') {
       const res = await fetch(
         `https://api.elevenlabs.io/v1/text-to-speech/${SEFATAI_VOICE_ID}`,
@@ -281,7 +281,7 @@ export async function POST(req: Request) {
         }
       )
       if (!res.ok) throw new Error(`ElevenLabs error: ${res.status}`)
-      stitched = new Uint8Array(await res.arrayBuffer())
+      stitched = await res.arrayBuffer()
     } else {
       const audioBuffers = await Promise.all(
         chunks.map(chunk => ttsChunk(chunk.text, chunk.lang))
