@@ -488,10 +488,13 @@ export async function POST(req: Request) {
       }
     }
 
+// CHUNKING_ENABLED env var — set to 'false' in Vercel to disable chunking
+    const chunkingEnabled = process.env.CHUNKING_ENABLED !== 'false'
     const chunks = chunkByLanguage(spokenText)
     let stitched: ArrayBuffer
 
-    if (chunks.length === 1 && chunks[0].lang === 'en') {
+    if (!chunkingEnabled || (chunks.length === 1 && chunks[0].lang === 'en')) {
+      // Single call — no chunking
       const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${SEFATAI_VOICE_ID}`, {
         method: 'POST',
         headers: {
@@ -504,7 +507,13 @@ export async function POST(req: Request) {
       if (!res.ok) throw new Error(`ElevenLabs error: ${res.status}`)
       stitched = await res.arrayBuffer()
     } else {
-      const audioBuffers = await Promise.all(chunks.map(chunk => ttsChunk(chunk.text, chunk.lang)))
+      // Chunked — batch in groups of 4
+      const audioBuffers: ArrayBuffer[] = []
+      for (let i = 0; i < chunks.length; i += 4) {
+        const batch = chunks.slice(i, i + 4)
+        const batchBuffers = await Promise.all(batch.map(chunk => ttsChunk(chunk.text, chunk.lang)))
+        audioBuffers.push(...batchBuffers)
+      }
       stitched = stitchAudio(audioBuffers)
     }
 
