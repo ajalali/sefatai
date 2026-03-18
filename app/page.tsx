@@ -22,7 +22,8 @@ export default function Home() {
   const [answer, setAnswer] = useState('')
   const [answerKey, setAnswerKey] = useState(0)
   const [sources, setSources] = useState<Source[]>([])
-  const [morePressed, setMorePressed] = useState(false)
+const [morePressed, setMorePressed] = useState(false)
+  const [rippleKey, setRippleKey] = useState(0)
 
   const historyRef = useRef<{ role: string; content: string }[]>([])
   const audioRef = useRef<HTMLAudioElement | null>(null)
