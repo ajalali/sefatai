@@ -252,8 +252,8 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Dedication */}
-            <div className="flex flex-col items-center text-center px-6 mt-32">
+   {/* Dedication */}
+            <div className="flex flex-col items-center text-center px-6 mt-64">
               <div className="w-16 h-px bg-amber-900/40 mb-5" />
               <p className="text-amber-200/50 text-xs mb-4">🤍 Dedicated in loving memory of:</p>
               <p className="text-amber-200/70 text-sm font-serif leading-relaxed whitespace-nowrap">
