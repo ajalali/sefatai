@@ -241,24 +241,26 @@ export default function Home() {
           </div>
         )}
 
-        {!started ? (
-          <>
-            <p className="text-amber-400/60 text-xs tracking-widest uppercase animate-pulse">tap to begin</p>
-            <button
-              onClick={handleStart}
-              className="w-36 h-36 rounded-full border-2 border-amber-400 overflow-hidden hover:opacity-90 transition-all duration-500 shadow-[0_0_60px_rgba(217,119,6,0.4)]"
-            >
-              <Image
-                src="/sefatailogo.png"
-                alt="Sefatai"
-                width={144}
-                height={144}
-                className="w-full h-full object-cover"
-              />
-            </button>
+   {!started ? (
+          <div className="flex flex-col items-center justify-between w-full" style={{ minHeight: 'calc(100vh - 80px)' }}>
+            <div className="flex flex-col items-center gap-6 pt-20">
+              <p className="text-amber-400/60 text-xs tracking-widest uppercase animate-pulse">tap to begin</p>
+              <button
+                onClick={handleStart}
+                className="w-36 h-36 rounded-full border-2 border-amber-400 overflow-hidden hover:opacity-90 transition-all duration-500 shadow-[0_0_60px_rgba(217,119,6,0.4)]"
+              >
+                <Image
+                  src="/sefatailogo.png"
+                  alt="Sefatai"
+                  width={144}
+                  height={144}
+                  className="w-full h-full object-cover"
+                />
+              </button>
+            </div>
 
-   {/* Dedication */}
-            <div className="absolute bottom-10 left-0 right-0 flex flex-col items-center px-6">
+            {/* Dedication */}
+            <div className="flex flex-col items-center text-center px-6 pb-10">
               <div className="w-16 h-px bg-amber-900/40 mb-5" />
               <p className="text-amber-200/50 text-xs mb-4">🤍 Dedicated in loving memory of:</p>
               <p className="text-amber-200/70 text-sm font-serif leading-relaxed whitespace-nowrap">
@@ -268,6 +270,7 @@ export default function Home() {
                 Leah bat Yehezkel ve Lulu &amp; Baacker Rahamim ben Avraham
               </p>
             </div>
+          </div>
           </>
         ) : (
           <>
