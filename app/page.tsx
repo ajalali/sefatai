@@ -234,16 +234,9 @@ export default function Home() {
       <div className="relative z-10 flex flex-col items-center gap-6 px-6 max-w-md w-full">
 
         {/* Title — hidden on boot screen, visible in main app */}
-        {started && (
-          <div className="text-center">
-            <h1 className="text-3xl font-serif text-amber-200 tracking-widest">סֵפָתַי</h1>
-            <p className="text-amber-400/50 text-xs tracking-widest uppercase mt-1">Voice Learning Companion</p>
-          </div>
-        )}
-
-        {!started ? (
-          <div className="flex flex-col items-center justify-between w-full" style={{ minHeight: 'calc(100vh - 80px)' }}>
-            <div className="flex flex-col items-center gap-6 pt-20">
+      {!started ? (
+          <div className="flex flex-col items-center w-full">
+            <div className="flex flex-col items-center gap-6">
               <p className="text-amber-400/60 text-xs tracking-widest uppercase animate-pulse">tap to begin</p>
               <button
                 onClick={handleStart}
@@ -260,7 +253,7 @@ export default function Home() {
             </div>
 
             {/* Dedication */}
-            <div className="flex flex-col items-center text-center px-6 pb-10">
+            <div className="flex flex-col items-center text-center px-6 mt-32">
               <div className="w-16 h-px bg-amber-900/40 mb-5" />
               <p className="text-amber-200/50 text-xs mb-4">🤍 Dedicated in loving memory of:</p>
               <p className="text-amber-200/70 text-sm font-serif leading-relaxed whitespace-nowrap">
