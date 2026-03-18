@@ -234,8 +234,8 @@ export default function Home() {
       <div className="relative z-10 flex flex-col items-center gap-6 px-6 max-w-md w-full">
 
         {/* Title — hidden on boot screen, visible in main app */}
-      {!started ? (
-          <div className="flex flex-col items-center w-full">
+  {!started ? (
+          <>
             <div className="flex flex-col items-center gap-6">
               <p className="text-amber-400/60 text-xs tracking-widest uppercase animate-pulse">tap to begin</p>
               <button
@@ -252,8 +252,8 @@ export default function Home() {
               </button>
             </div>
 
-   {/* Dedication */}
-            <div className="flex flex-col items-center text-center px-6 mt-64">
+            {/* Dedication — pinned to bottom of screen */}
+            <div className="fixed bottom-12 left-0 right-0 flex flex-col items-center text-center px-6">
               <div className="w-16 h-px bg-amber-900/40 mb-5" />
               <p className="text-amber-200/50 text-xs mb-4">🤍 Dedicated in loving memory of:</p>
               <p className="text-amber-200/70 text-sm font-serif leading-relaxed whitespace-nowrap">
@@ -263,7 +263,7 @@ export default function Home() {
                 Leah bat Yehezkel ve Lulu &amp; Baacker Rahamim ben Avraham
               </p>
             </div>
-          </div>
+          </>
         ) : (
           <>
             <div className="relative flex items-center justify-center">
