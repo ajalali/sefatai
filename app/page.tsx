@@ -259,8 +259,11 @@ export default function Home() {
 
     {/* Dedication */}
             <div className="text-center mt-12 px-4">
+                 </p>
+               </p>
               <p className="text-amber-200/50 text-xs mb-3">🤍 Dedicated in loving memory of:</p>
-              <p className="text-amber-200/70 text-sm font-serif leading-relaxed whitespace-nowrap">
+         </p>        
+      <p className="text-amber-200/70 text-sm font-serif leading-relaxed whitespace-nowrap">
                 לֵאָה בַּת יְחֶזְקֵאל וְלוּלוּ &amp; בַּקֶר רַחֲמִים בֶּן אַבְרָהָם
               </p>
               <p className="text-amber-200/45 text-xs mt-2 tracking-wide">
