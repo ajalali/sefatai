@@ -1,10 +1,3 @@
-Beautiful dedication. Here's the full `page.tsx`:
-
-👉 **https://github.com/ajalali/sefatai/edit/main/app/page.tsx**
-
-Select all and replace with:
-
-```tsx
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
@@ -366,6 +359,3 @@ export default function Home() {
     </main>
   )
 }
-```
-
-Commit and tell me when green!
