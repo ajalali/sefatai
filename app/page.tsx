@@ -1,3 +1,10 @@
+Beautiful dedication. Here's the full `page.tsx`:
+
+👉 **https://github.com/ajalali/sefatai/edit/main/app/page.tsx**
+
+Select all and replace with:
+
+```tsx
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
@@ -233,10 +240,13 @@ export default function Home() {
 
       <div className="relative z-10 flex flex-col items-center gap-6 px-6 max-w-md w-full">
 
-        <div className="text-center">
-          <h1 className="text-3xl font-serif text-amber-200 tracking-widest">סֵפָתַי</h1>
-          <p className="text-amber-400/50 text-xs tracking-widest uppercase mt-1">Voice Learning Companion</p>
-        </div>
+        {/* Title — hidden on boot screen, visible in main app */}
+        {started && (
+          <div className="text-center">
+            <h1 className="text-3xl font-serif text-amber-200 tracking-widest">סֵפָתַי</h1>
+            <p className="text-amber-400/50 text-xs tracking-widest uppercase mt-1">Voice Learning Companion</p>
+          </div>
+        )}
 
         {!started ? (
           <>
@@ -253,6 +263,20 @@ export default function Home() {
                 className="w-full h-full object-cover"
               />
             </button>
+
+            {/* Dedication */}
+            <div className="text-center mt-4 px-4">
+              <p className="text-amber-200/30 text-xs mb-2">🤍 Dedicated in loving memory of:</p>
+              <p className="text-amber-200/50 text-sm font-serif leading-relaxed">
+                לֵאָה בַּת יְחֶזְקֵאל וְלוּלוּ
+              </p>
+              <p className="text-amber-200/50 text-sm font-serif leading-relaxed">
+                &amp; בַּקֶר רַחֲמִים בֶּן אַבְרָהָם
+              </p>
+              <p className="text-amber-200/25 text-xs mt-1 tracking-wide">
+                Leah bat Yehezkel ve Lulu &amp; Baacker Rahamim ben Avraham
+              </p>
+            </div>
           </>
         ) : (
           <>
@@ -342,3 +366,6 @@ export default function Home() {
     </main>
   )
 }
+```
+
+Commit and tell me when green!
