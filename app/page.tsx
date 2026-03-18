@@ -21,9 +21,9 @@ export default function Home() {
   const [transcript, setTranscript] = useState('')
   const [answer, setAnswer] = useState('')
   const [answerKey, setAnswerKey] = useState(0)
-  const [sources, setSources] = useState<Source[]>([])
-const [morePressed, setMorePressed] = useState(false)
   const [rippleKey, setRippleKey] = useState(0)
+  const [sources, setSources] = useState<Source[]>([])
+  const [morePressed, setMorePressed] = useState(false)
 
   const historyRef = useRef<{ role: string; content: string }[]>([])
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -225,6 +225,7 @@ const [morePressed, setMorePressed] = useState(false)
   const handleMore = () => {
     setMorePressed(true)
     setAnswerKey(k => k + 1)
+    setRippleKey(k => k + 1)
     speak('say more')
   }
 
@@ -276,7 +277,7 @@ const [morePressed, setMorePressed] = useState(false)
 
         <div className="relative flex items-center justify-center">
           {appState === 'loading' && (
-            <div key={`ripple-${answerKey}`} className="absolute inset-0 flex items-center justify-center">
+            <div key={`ripple-${rippleKey}`} className="absolute inset-0 flex items-center justify-center">
               <div className="absolute rounded-full border border-amber-400/50 animate-ping"
                 style={{ width: '160px', height: '160px', animationDuration: '1s' }} />
               <div className="absolute rounded-full border border-amber-300/30 animate-ping"
@@ -328,16 +329,15 @@ const [morePressed, setMorePressed] = useState(false)
             disabled={morePressed}
             className={`text-xs uppercase tracking-widest transition-all duration-300 border rounded-full px-5 py-2 min-w-[90px] ${
               morePressed
-                ? 'border-amber-400/30 text-amber-400/30 bg-transparent cursor-not-allowed'
+                ? 'border-amber-400/40 text-amber-300/60 bg-transparent cursor-not-allowed'
                 : 'border-amber-900/40 text-amber-400/50 hover:text-amber-300 hover:border-amber-400/40'
             }`}
           >
-    >
             {morePressed ? (
               <span className="inline-flex gap-1 items-center justify-center">
-                <span className="w-1 h-1 rounded-full bg-amber-300/60 animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-1 h-1 rounded-full bg-amber-300/60 animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-1 h-1 rounded-full bg-amber-300/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-300/70 animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-300/70 animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-300/70 animate-bounce" style={{ animationDelay: '300ms' }} />
               </span>
             ) : '+ more'}
           </button>
