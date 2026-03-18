@@ -332,7 +332,14 @@ const [morePressed, setMorePressed] = useState(false)
                 : 'border-amber-900/40 text-amber-400/50 hover:text-amber-300 hover:border-amber-400/40'
             }`}
           >
-            {morePressed ? '· · ·' : '+ more'}
+    >
+            {morePressed ? (
+              <span className="inline-flex gap-1 items-center justify-center">
+                <span className="w-1 h-1 rounded-full bg-amber-300/60 animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1 h-1 rounded-full bg-amber-300/60 animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1 h-1 rounded-full bg-amber-300/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+              </span>
+            ) : '+ more'}
           </button>
         )}
 
