@@ -241,7 +241,7 @@ export default function Home() {
           </div>
         )}
 
-   {!started ? (
+        {!started ? (
           <div className="flex flex-col items-center justify-between w-full" style={{ minHeight: 'calc(100vh - 80px)' }}>
             <div className="flex flex-col items-center gap-6 pt-20">
               <p className="text-amber-400/60 text-xs tracking-widest uppercase animate-pulse">tap to begin</p>
@@ -271,7 +271,6 @@ export default function Home() {
               </p>
             </div>
           </div>
-          </>
         ) : (
           <>
             <div className="relative flex items-center justify-center">
