@@ -258,12 +258,10 @@ export default function Home() {
             </button>
 
     {/* Dedication */}
-            <div className="text-center mt-12 px-4">
-              <br></br>
-              <p className="text-amber-200/50 text-xs mb-3">🤍 Dedicated in loving memory of:</p>
-         </p>        
-      <p className="text-amber-200/70 text-sm font-serif leading-relaxed whitespace-nowrap">
-                לֵאָה בַּת יְחֶזְקֵאל וְלוּלוּ &amp; בַּקֶר רַחֲמִים בֶּן אַבְרָהָם
+            <div className="text-center mt-20 px-4">
+              <p className="text-amber-200/50 text-xs mb-5">🤍 Dedicated in loving memory of:</p>
+              <p className="text-amber-200/70 text-sm font-serif leading-relaxed whitespace-nowrap">
+                לאה בת יחזקאל ולולו &amp; בקר רחמים בן אברהם
               </p>
               <p className="text-amber-200/45 text-xs mt-2 tracking-wide">
                 Leah bat Yehezkel ve Lulu &amp; Baacker Rahamim ben Avraham
